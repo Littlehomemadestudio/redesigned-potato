@@ -1271,10 +1271,10 @@ async def alliance_command(message, chat_id, user_id):
                 except:
                     alliance_text += f"• User {member_id}\n"
             
-            alliance_text += "\n**دستورات:**
-/alliance leave - ترک اتحاد
-/alliance kick [ریپلای] - اخراج عضو
-/alliance invite [ریپلای] - دعوت عضو جدید"
+            alliance_text += "\n**دستورات:**\n"
+            alliance_text += "/alliance leave - ترک اتحاد\n"
+            alliance_text += "/alliance kick [ریپلای] - اخراج عضو\n"
+            alliance_text += "/alliance invite [ریپلای] - دعوت عضو جدید"
             
         else:
             # نمایش لیست اتحادهای موجود
