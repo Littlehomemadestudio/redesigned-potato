@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  war-bot:
+    build: .
+    container_name: war-simulation-bot
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./config.py:/app/config.py
+      - ./logs:/app/logs
+    environment:
+      - TZ=Asia/Tehran
+    depends_on:
+      - redis
+    networks:
+      - war-bot-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: war-bot-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks:
+      - war-bot-network
+
+volumes:
+  redis-data:
+
+networks:
+  war-bot-network:
+    driver: bridge

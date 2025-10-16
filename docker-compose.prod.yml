@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  war-bot:
+    build: .
+    container_name: war-simulation-bot-prod
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./config.py:/app/config.py
+      - ./logs:/app/logs
+      - ./backups:/app/backups
+    environment:
+      - TZ=Asia/Tehran
+      - NODE_ENV=production
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - war-bot-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: war-bot-redis-prod
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks:
+      - war-bot-network
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: war-bot-postgres-prod
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=war_bot
+      - POSTGRES_USER=war_bot_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - war-bot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U war_bot_user -d war_bot"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    container_name: war-bot-nginx-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - war-bot
+    networks:
+      - war-bot-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: war-bot-prometheus-prod
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - war-bot-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: war-bot-grafana-prod
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - war-bot-network
+
+volumes:
+  redis-data:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  war-bot-network:
+    driver: bridge

@@ -1,0 +1,59 @@
+# فایل‌های پایتون
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# فایل‌های مجازی
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# فایل‌های IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# فایل‌های سیستم
+.DS_Store
+Thumbs.db
+
+# فایل‌های ربات
+config.py
+war_data.txt
+war_logs.txt
+*.log
+
+# فایل‌های داده
+data/
+logs/
+backups/
+
+# فایل‌های تست
+test_data.txt
+*.tmp
+*.temp
+
+# فایل‌های داکر
+.dockerignore
