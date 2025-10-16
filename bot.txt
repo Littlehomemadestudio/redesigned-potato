@@ -14,42 +14,42 @@ DATA_FILE = "group_data.json"
 # Initialize bot
 bot = Bot(token=TOKEN)
 
-# -------------------- GAME CONFIGURATION --------------------
-# Military assets with costs, power, and names
+# -------------------- GAME CONFIGURATION -----# Military assets with costs, power, and names (Real-life military equipment)
 MILITARY_ASSETS = {
-    # Tanks
-    "light_tank": {"cost": 50, "power": 5, "name": "تانک سبک"},
-    "medium_tank": {"cost": 100, "power": 10, "name": "تانک متوسط"},
-    "heavy_tank": {"cost": 200, "power": 20, "name": "تانک سنگین"},
-    "super_tank": {"cost": 500, "power": 50, "name": "تانک فوق سنگین"},
+    # Tanks (Real-life tanks)
+    "m1_abrams": {"cost": 50, "power": 5, "name": "تانک M1 آبرامز"},
+    "t72": {"cost": 100, "power": 10, "name": "تانک T-72"},
+    "leopard2": {"cost": 200, "power": 20, "name": "تانک لئوپارد 2"},
+    "challenger2": {"cost": 500, "power": 50, "name": "تانک چلنجر 2"},
     
-    # Aircraft
-    "fighter": {"cost": 100, "power": 15, "name": "هواپیمای جنگنده"},
-    "bomber": {"cost": 250, "power": 35, "name": "هواپیمای بمب افکن"},
-    "stealth": {"cost": 500, "power": 70, "name": "هواپیمای استیلث"},
-    "drone": {"cost": 150, "power": 25, "name": "پهپاد نظامی"},
+    # Aircraft (Real-life aircraft)
+    "f16": {"cost": 100, "power": 15, "name": "جنگنده F-16 فالکن"},
+    "f22_raptor": {"cost": 250, "power": 35, "name": "جنگنده F-22 رپتور"},
+    "b2_spirit": {"cost": 500, "power": 70, "name": "بمب افکن B-2 اسپیریت"},
+    "predator_drone": {"cost": 150, "power": 25, "name": "پهپاد پردیتور"},
     
-    # Missiles
-    "missile": {"cost": 300, "power": 60, "name": "موشک"},
-    "ballistic_missile": {"cost": 1000, "power": 200, "name": "موشک بالستیک"},
-    "cruise_missile": {"cost": 800, "power": 150, "name": "موشک کروز"},
+    # Missiles (Real-life missiles)
+    "tomahawk": {"cost": 300, "power": 60, "name": "موشک تاماهاک"},
+    "icbm": {"cost": 1000, "power": 200, "name": "موشک بالستیک قاره پیما"},
+    "patriot": {"cost": 800, "power": 150, "name": "موشک پاتریوت"},
     
-    # Navy
-    "warship": {"cost": 1200, "power": 250, "name": "ناو جنگی"},
-    "submarine": {"cost": 1500, "power": 300, "name": "زیردریایی"},
-    "aircraft_carrier": {"cost": 5000, "power": 1000, "name": "ناو هواپیمابر"},
+    # Navy (Real-life naval vessels)
+    "arleigh_burke": {"cost": 1200, "power": 250, "name": "ناوچه آرلی برک"},
+    "ohio_submarine": {"cost": 1500, "power": 300, "name": "زیردریایی اوهایو"},
+    "nimitz_carrier": {"cost": 5000, "power": 1000, "name": "ناو هواپیمابر نیمیتز"},
     
-    # Infantry
-    "soldier": {"cost": 10, "power": 1, "name": "سرباز"},
-    "special_forces": {"cost": 100, "power": 15, "name": "نیروی ویژه"},
+    # Infantry (Real-life military units)
+    "marine": {"cost": 10, "power": 1, "name": "تفنگدار دریایی"},
+    "navy_seal": {"cost": 100, "power": 15, "name": "نیروی ویژه نیروی دریایی"},
     
-    # Artillery
-    "artillery": {"cost": 300, "power": 55, "name": "توپخانه"},
-    "rocket_launcher": {"cost": 400, "power": 70, "name": "سامانه راکت انداز"},
+    # Artillery (Real-life artillery systems)
+    "m777_howitzer": {"cost": 300, "power": 55, "name": "توپخانه M777"},
+    "mlrs": {"cost": 400, "power": 70, "name": "سامانه راکت انداز چندگانه"},
     
-    # Defense Systems
-    "anti_air": {"cost": 350, "power": 60, "name": "ضدهوایی"},
-    "radar": {"cost": 200, "power": 10, "name": "رادار"},
+    # Defense Systems (Real-life defense systems)
+    "iron_dome": {"cost": 350, "power": 60, "name": "گنبد آهنین"},
+    "aegis_radar": {"cost": 200, "power": 10, "name": "رادار ایجیس"},
+}ar": {"cost": 200, "power": 10, "name": "رادار"},
 }
 
 BASE_POINTS_PER_MESSAGE = 2000
@@ -273,11 +273,14 @@ async def handle_command(message, command, chat_id, user_id):
         elif command.startswith("/setwelcome") and is_owner(user_id, chat_id):
             await set_welcome(message, chat_id)
         
-        elif command.startswith("/addadmin") and is_owner(user_id, chat_id):
-            await add_admin(message, chat_id)
+        elif command.startswit        elif command == "/owner" and is_owner(user_id, chat_id):
+            await show_owner(message, chat_id)
         
-        elif command.startswith("/removeadmin") and is_owner(user_id, chat_id):
-            await remove_admin(message, chat_id)
+        elif command == "/clean" and is_owner(user_id, chat_id):
+            await clean_messages(message, chat_id)
+        
+        else:
+            await message.reply("🚫 دستور نامعتبر یا عدم دسترسی!")it remove_admin(message, chat_id)
         
         elif command == "/owner" and is_owner(user_id, chat_id):
             await show_owner(message, chat_id)
@@ -297,20 +300,14 @@ async def is_creator(user_id, chat_id):
     except:
         return False
 
-# -------------------- GAME COMMAND HANDLERS --------------------
-async def game_help(message):
-    """نمایش راهنمای بازی"""
-    help_text = """
-🎮 راهنمای بازی نظامی:
-
-دستورات بازی:
-/points - نمایش امتیازات شما
-/military - نمایش نیروی نظامی شما
-/buy [نوع] [تعداد] - خرید تجهیزات نظامی
-/attack [ریپلای] - حمله به کاربر
-
-💰 انواع تجهیزات قابل خرید:
-- تانک‌ها: light_tank, medium_tank, heavy_tank, super_tank
+# -------------------- GAME COMMAND HANDLERS ---------------💰 انواع تجهیزات قابل خرید:
+- تانک‌ها: m1_abrams, t72, leopard2, challenger2
+- هواپیماها: f16, f22_raptor, b2_spirit, predator_drone
+- موشک‌ها: tomahawk, icbm, patriot
+- نیروی دریایی: arleigh_burke, ohio_submarine, nimitz_carrier
+- پیاده نظام: marine, navy_seal
+- توپخانه: m777_howitzer, mlrs
+- سیستم‌های دفاعی: iron_dome, aegis_radarsuper_tank
 - هواپیماها: fighter, bomber, stealth, drone
 - موشک‌ها: missile, ballistic_missile, cruise_missile
 - نیروی دریایی: warship, submarine, aircraft_carrier
@@ -338,21 +335,16 @@ async def show_points(message, chat_id, user_id):
         await message.reply(f"💰 امتیازات شما: {user_data['points']}")
         await delete_message_safe(message, 10)  # Delete after 10 seconds
     except Exception as e:
-        print(f"Error in show_points: {e}")
-        await message.reply("⚠️ خطایی در نمایش امتیازات رخ داد!")
-
-async def show_military(message, chat_id, user_id):
-    """نمایش نیروی نظامی کاربر"""
-    try:
-        user_data = get_user_data(chat_id, user_id)
-        
-        military_text = "🎖 نیروی نظامی شما:\n\n"
-        
-        # Group assets by category for better display
+        print(f"Error in show_points:         # Group assets by category for better display
         categories = {
-            "تانک‌ها": ["light_tank", "medium_tank", "heavy_tank", "super_tank"],
-            "هواپیماها": ["fighter", "bomber", "stealth", "drone"],
-            "موشک‌ها": ["missile", "ballistic_missile", "cruise_missile"],
+            "تانک‌ها": ["m1_abrams", "t72", "leopard2", "challenger2"],
+            "هواپیماها": ["f16", "f22_raptor", "b2_spirit", "predator_drone"],
+            "موشک‌ها": ["tomahawk", "icbm", "patriot"],
+            "نیروی دریایی": ["arleigh_burke", "ohio_submarine", "nimitz_carrier"],
+            "پیاده نظام": ["marine", "navy_seal"],
+            "توپخانه": ["m777_howitzer", "mlrs"],
+            "دفاعی": ["iron_dome", "aegis_radar"]
+        }موشک‌ها": ["missile", "ballistic_missile", "cruise_missile"],
             "نیروی دریایی": ["warship", "submarine", "aircraft_carrier"],
             "پیاده نظام": ["soldier", "special_forces"],
             "توپخانه": ["artillery", "rocket_launcher"],
@@ -774,21 +766,18 @@ async def alliance_kick(message, chat_id, user_id):
         print(f"Error in alliance_kick: {e}")
         await message.reply("⚠️ خطا در اخراج کاربر!")
 
-# -------------------- ORIGINAL COMMAND HANDLERS --------------------
-async def show_help(message):
-    """نمایش پیام راهنما"""
-    help_text = """
-🤖 راهنمای ربات مدیریت گروه:
-
-👤 دستورات عمومی:
-/help - نمایش این راهنما
-/rules - نمایش قوانین گروه
-/info - اطلاعات کاربری
-/game_help - راهنمای بازی نظامی
-
-🎮 دستورات بازی:
-/points - نمایش امتیازات
-/military - نمایش نیروی نظامی
+# -----🛡 دستورات مالک گروه:
+/setowner - تنظیم مالک جدید (فقط سازنده گروه)
+/mute [زمان] [دلیل] - محدود کردن کاربر
+/unmute - حذف محدودیت کاربر
+/ban [دلیل] - حذف کاربر از گروه
+/warn [دلیل] - اخطار به کاربر
+/setrules [متن] - تنظیم قوانین گروه
+/setwelcome [متن] - تنظیم پیام خوشآمدگویی
+/addadmin [ایدی] - افزودن ادمین جدید
+/removeadmin [ایدی] - حذف ادمین
+/owner - نمایش مالک گروه
+/clean - پاکسازی پیام‌های ربات و دستوراتیش نیروی نظامی
 /buy [نوع] [تعداد] - خرید تجهیزات
 /attack [ریپلای] - حمله به کاربر
 
@@ -1036,20 +1025,39 @@ async def add_admin(message, chat_id):
             await message.reply("⚠️ کاربر قبلا ادمین است!")
             
     except ValueError:
-        await message.reply("⚠️ آیدی کاربر باید عددی باشد!")
-    except Exception as e:
-        print(f"Error in add_admin: {e}")
-        await message.reply("⚠️ خطا در افزودن ادمین!")
-
-async def remove_admin(message, chat_id):
-    """حذف ادمین"""
+        await async def show_owner(message, chat_id):
+    """نمایش مالک گروه"""
     try:
-        parts = message.content.split()
-        if len(parts) < 2:
-            await message.reply("⚠️ فرمت دستور: /removeadmin [آیدی کاربر]")
-            return
+        chat_data = get_chat_data(chat_id)
+        if chat_data["owner_id"]:
+            await message.reply(f"👑 مالک گروه: {chat_data['owner_id']}")
+        else:
+            await message.reply("⚠️ مالک گروه تنظیم نشده است. از /setowner استفاده کنید.")
+    except Exception as e:
+        print(f"Error in show_owner: {e}")
+        await message.reply("⚠️ خطا در نمایش مالک گروه!")
+
+async def clean_messages(message, chat_id):
+    """حذف پیام‌های ربات و دستورات کاربران"""
+    try:
+        # Get the last 50 messages in the chat
+        messages_to_delete = []
         
-        admin_id = int(parts[1])
+        # This is a simplified version - in a real implementation,
+        # you would need to track message IDs and delete them
+        # For now, we'll just send a confirmation message
+        
+        await message.reply("🧹 در حال پاکسازی پیام‌ها... (این قابلیت نیاز به پیاده‌سازی کامل دارد)")
+        
+        # In a real implementation, you would:
+        # 1. Get recent messages from the chat
+        # 2. Filter bot messages and command messages
+        # 3. Delete them in batches
+        # 4. Send confirmation of how many messages were deleted
+        
+    except Exception as e:
+        print(f"Error in clean_messages: {e}")
+        await message.reply("⚠️ خطا در پاکسازی پیام‌ها!"))
         chat_data = get_chat_data(chat_id)
         
         if admin_id in chat_data["admins"]:
