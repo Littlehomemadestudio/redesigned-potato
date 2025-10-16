@@ -189,6 +189,279 @@ RESOURCES = {
     "rare_earth": {"name": "فلزات نادر", "emoji": "💠", "base_income": 30},
 }
 
+# Government Systems
+GOVERNMENT_SYSTEMS = {
+    "democracy": {
+        "name": "دموکراسی",
+        "emoji": "🗳️",
+        "description": "حکومت مردم، برای مردم، توسط مردم",
+        "benefits": {
+            "resource_bonus": 1.2,  # 20% bonus to all resources
+            "unit_discount": 0.9,   # 10% discount on units
+            "alliance_bonus": 1.3,  # 30% bonus to alliance benefits
+            "research_bonus": 1.15, # 15% bonus to research
+            "stability": 0.8        # 80% stability (less rebellion)
+        },
+        "penalties": {
+            "military_power": 0.95, # 5% penalty to military power
+            "spy_penalty": 0.9      # 10% penalty to spy success
+        },
+        "unlock_level": 1
+    },
+    "socialism": {
+        "name": "سوسیالیسم",
+        "emoji": "🏭",
+        "description": "توزیع عادلانه ثروت و منابع",
+        "benefits": {
+            "resource_bonus": 1.4,  # 40% bonus to basic resources
+            "population_bonus": 1.3, # 30% bonus to population
+            "collector_bonus": 1.25, # 25% bonus to collectors
+            "stability": 0.9        # 90% stability
+        },
+        "penalties": {
+            "money_penalty": 0.8,   # 20% penalty to money income
+            "trade_penalty": 0.85   # 15% penalty to trade
+        },
+        "unlock_level": 3
+    },
+    "communism": {
+        "name": "کمونیسم",
+        "emoji": "☭",
+        "description": "مالکیت عمومی وسایل تولید",
+        "benefits": {
+            "resource_bonus": 1.5,  # 50% bonus to all resources
+            "collector_bonus": 1.4, # 40% bonus to collectors
+            "population_bonus": 1.4, # 40% bonus to population
+            "stability": 0.95       # 95% stability
+        },
+        "penalties": {
+            "money_penalty": 0.7,   # 30% penalty to money income
+            "trade_penalty": 0.7,   # 30% penalty to trade
+            "research_penalty": 0.9 # 10% penalty to research
+        },
+        "unlock_level": 5
+    },
+    "dictatorship": {
+        "name": "دیکتاتوری",
+        "emoji": "👑",
+        "description": "حکومت مطلق یک فرد",
+        "benefits": {
+            "military_power": 1.3,  # 30% bonus to military power
+            "spy_bonus": 1.2,       # 20% bonus to spy success
+            "unit_discount": 0.85,  # 15% discount on units
+            "conquest_bonus": 1.25  # 25% bonus to conquest
+        },
+        "penalties": {
+            "resource_penalty": 0.9, # 10% penalty to resources
+            "stability": 0.6,        # 60% stability (more rebellion)
+            "alliance_penalty": 0.8  # 20% penalty to alliance benefits
+        },
+        "unlock_level": 2
+    },
+    "fascism": {
+        "name": "فاشیسم",
+        "emoji": "⚡",
+        "description": "حکومت اقتدارگرا و ملی‌گرا",
+        "benefits": {
+            "military_power": 1.4,  # 40% bonus to military power
+            "conquest_bonus": 1.35, # 35% bonus to conquest
+            "unit_discount": 0.8,   # 20% discount on units
+            "spy_bonus": 1.15       # 15% bonus to spy success
+        },
+        "penalties": {
+            "resource_penalty": 0.85, # 15% penalty to resources
+            "stability": 0.5,         # 50% stability (high rebellion)
+            "alliance_penalty": 0.7,  # 30% penalty to alliance benefits
+            "research_penalty": 0.9   # 10% penalty to research
+        },
+        "unlock_level": 4
+    },
+    "monarchy": {
+        "name": "سلطنت",
+        "emoji": "👑",
+        "description": "حکومت پادشاهی موروثی",
+        "benefits": {
+            "stability": 1.1,        # 110% stability
+            "diplomacy_bonus": 1.25, # 25% bonus to diplomacy
+            "alliance_bonus": 1.2,   # 20% bonus to alliance benefits
+            "trade_bonus": 1.15      # 15% bonus to trade
+        },
+        "penalties": {
+            "military_penalty": 0.95, # 5% penalty to military power
+            "research_penalty": 0.95  # 5% penalty to research
+        },
+        "unlock_level": 3
+    },
+    "theocracy": {
+        "name": "تئوکراسی",
+        "emoji": "🕌",
+        "description": "حکومت بر اساس اصول مذهبی",
+        "benefits": {
+            "stability": 1.2,        # 120% stability
+            "population_bonus": 1.25, # 25% bonus to population
+            "social_credit_bonus": 1.5, # 50% bonus to social credit
+            "defense_bonus": 1.1     # 10% bonus to defense
+        },
+        "penalties": {
+            "research_penalty": 0.9, # 10% penalty to research
+            "technology_penalty": 0.85, # 15% penalty to technology
+            "trade_penalty": 0.9     # 10% penalty to trade
+        },
+        "unlock_level": 4
+    },
+    "anarchy": {
+        "name": "آنارشی",
+        "emoji": "💀",
+        "description": "عدم وجود حکومت مرکزی",
+        "benefits": {
+            "military_power": 1.1,   # 10% bonus to military power
+            "unit_discount": 0.9,    # 10% discount on units
+            "spy_bonus": 1.1,        # 10% bonus to spy success
+            "freedom_bonus": 1.2     # 20% bonus to all actions
+        },
+        "penalties": {
+            "stability": 0.3,        # 30% stability (very high rebellion)
+            "resource_penalty": 0.8, # 20% penalty to resources
+            "alliance_penalty": 0.6, # 40% penalty to alliance benefits
+            "collector_penalty": 0.7 # 30% penalty to collectors
+        },
+        "unlock_level": 6
+    }
+}
+
+# Resource Collectors
+RESOURCE_COLLECTORS = {
+    # Basic Collectors
+    "money_collector": {
+        "name": "بانک مرکزی",
+        "emoji": "🏦",
+        "resource": "money",
+        "base_production": 100,
+        "cost": 5000,
+        "level_req": 1,
+        "description": "تولید پول از طریق بانکداری"
+    },
+    "oil_rig": {
+        "name": "سکوی نفتی",
+        "emoji": "🛢️",
+        "resource": "oil",
+        "base_production": 50,
+        "cost": 8000,
+        "level_req": 2,
+        "description": "استخراج نفت از دریا"
+    },
+    "coal_mine": {
+        "name": "معدن زغال سنگ",
+        "emoji": "⛏️",
+        "resource": "steel",
+        "base_production": 30,
+        "cost": 6000,
+        "level_req": 2,
+        "description": "استخراج زغال سنگ برای فولاد"
+    },
+    "iron_mine": {
+        "name": "معدن آهن",
+        "emoji": "⛏️",
+        "resource": "steel",
+        "base_production": 40,
+        "cost": 7000,
+        "level_req": 3,
+        "description": "استخراج آهن برای فولاد"
+    },
+    "aluminum_plant": {
+        "name": "کارخانه آلومینیوم",
+        "emoji": "🏭",
+        "resource": "aluminum",
+        "base_production": 25,
+        "cost": 10000,
+        "level_req": 4,
+        "description": "تولید آلومینیوم"
+    },
+    "titanium_refinery": {
+        "name": "پالایشگاه تیتانیوم",
+        "emoji": "🏭",
+        "resource": "titanium",
+        "base_production": 15,
+        "cost": 15000,
+        "level_req": 5,
+        "description": "پالایش تیتانیوم"
+    },
+    "population_center": {
+        "name": "مرکز جمعیتی",
+        "emoji": "🏘️",
+        "resource": "population",
+        "base_production": 200,
+        "cost": 3000,
+        "level_req": 1,
+        "description": "رشد جمعیت"
+    },
+    "tech_lab": {
+        "name": "آزمایشگاه فناوری",
+        "emoji": "🔬",
+        "resource": "technology",
+        "base_production": 10,
+        "cost": 12000,
+        "level_req": 4,
+        "description": "تولید فناوری"
+    },
+    "social_center": {
+        "name": "مرکز اجتماعی",
+        "emoji": "⭐",
+        "resource": "social_credit",
+        "base_production": 20,
+        "cost": 8000,
+        "level_req": 3,
+        "description": "تولید اعتبار اجتماعی"
+    },
+    
+    # Advanced Collectors
+    "uranium_enrichment": {
+        "name": "مرکز غنی‌سازی اورانیوم",
+        "emoji": "☢️",
+        "resource": "uranium",
+        "base_production": 5,
+        "cost": 50000,
+        "level_req": 8,
+        "description": "غنی‌سازی اورانیوم برای سلاح‌های هسته‌ای"
+    },
+    "rare_earth_mine": {
+        "name": "معدن فلزات نادر",
+        "emoji": "💎",
+        "resource": "rare_earth",
+        "base_production": 8,
+        "cost": 30000,
+        "level_req": 6,
+        "description": "استخراج فلزات نادر"
+    },
+    "fusion_reactor": {
+        "name": "راکتور همجوشی",
+        "emoji": "⚡",
+        "resource": "technology",
+        "base_production": 25,
+        "cost": 100000,
+        "level_req": 10,
+        "description": "تولید فناوری پیشرفته"
+    },
+    "space_mining": {
+        "name": "استخراج فضایی",
+        "emoji": "🛰️",
+        "resource": "titanium",
+        "base_production": 50,
+        "cost": 200000,
+        "level_req": 12,
+        "description": "استخراج تیتانیوم از فضا"
+    },
+    "quantum_lab": {
+        "name": "آزمایشگاه کوانتومی",
+        "emoji": "🔬",
+        "resource": "technology",
+        "base_production": 40,
+        "cost": 150000,
+        "level_req": 15,
+        "description": "تولید فناوری کوانتومی"
+    }
+}
+
 # Capital Upgrades
 CAPITAL_UPGRADES = {
     "government": {"name": "دولت", "levels": 10, "cost_multiplier": 1000, "benefits": ["income_bonus", "unit_discount"]},
@@ -282,7 +555,14 @@ def get_user_data(chat_id, user_id):
             "research": {},
             "diplomacy": {},
             "spies": 0,
-            "intelligence": 0
+            "intelligence": 0,
+            "government": "democracy",  # سیستم مدیریت
+            "collectors": {collector: 0 for collector in RESOURCE_COLLECTORS},  # کالکتورها
+            "last_collection": datetime.now().isoformat(),  # آخرین جمع‌آوری
+            "stability": 100,  # پایداری کشور
+            "rebellion_risk": 0,  # خطر شورش
+            "government_changes": 0,  # تعداد تغییرات حکومت
+            "collector_efficiency": 1.0  # کارایی کالکتورها
         }
     return game_data["users"][user_key]
 
