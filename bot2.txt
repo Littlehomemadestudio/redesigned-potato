@@ -1,0 +1,1149 @@
+import random
+from bale import Bot, Message, MenuKeyboardButton, MenuKeyboardMarkup, InlineKeyboard, InlineKeyboardButton
+import asyncio
+import json
+import os
+from operator import itemgetter
+from datetime import datetime, timedelta
+
+# Persistent storage
+DATA_FILE = "bot_data.json"
+
+# Initialize or load data
+if os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "r") as f:
+        bot_data = json.load(f)
+else:
+    bot_data = {
+        "chat_data": {},
+        "points": {},
+        "weapons_inventory": {},
+        "diamond_mines": {},
+        "last_diamond_collection": {},
+        "resource_mines": {},
+        "last_resource_collection": {},
+        "battle_history": {},
+        "superadmins": [],
+        "user_info": {}  # Store user information
+    }
+
+# Ensure all required keys exist
+required_keys = [
+    "chat_data", "points", "weapons_inventory", "diamond_mines", 
+    "last_diamond_collection", "resource_mines", "last_resource_collection",
+    "battle_history", "user_info"
+]
+for key in required_keys:
+    if key not in bot_data:
+        bot_data[key] = {}
+
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump(bot_data, f, indent=2)
+
+# Game Configuration
+RESOURCE_TYPES = {
+    "wood": {"name": "چوب", "emoji": "🪵", "price": 15},
+    "coal": {"name": "زغال سنگ", "emoji": "🪨", "price": 25},
+    "iron": {"name": "آهن", "emoji": "⛓️", "price": 40}
+}
+
+WEAPONS_SHOP = {
+    "soldier": {
+        "name": "سرباز",
+        "price": 100,
+        "resources": {"wood": 5},
+        "description": "واحد پیاده نظام پایه",
+        "power": 10,
+        "emoji": "🪖",
+        "loss_rate": 0.3
+    },
+    "tank": {
+        "name": "تانک",
+        "price": 500,
+        "resources": {"iron": 10, "coal": 5},
+        "description": "وسیله نقلیه زرهی سنگین",
+        "power": 50,
+        "emoji": "⚔️",
+        "loss_rate": 0.2
+    },
+    "fighter_jet": {
+        "name": "جنگنده اف-۲۲",
+        "price": 2000,
+        "resources": {"iron": 20, "coal": 10},
+        "description": "جنگنده پیشرفته برتری هوایی",
+        "power": 200,
+        "emoji": "✈️",
+        "loss_rate": 0.15
+    },
+    "nuke": {
+        "name": "سلاح هسته ای",
+        "price": 10000,
+        "resources": {"iron": 50, "coal": 30},
+        "description": "قدرت تخریب نهایی",
+        "power": 1000,
+        "emoji": "☢️",
+        "loss_rate": 0.1
+    },
+    "drone": {
+        "name": "پهپاد رزمی",
+        "price": 300,
+        "resources": {"iron": 8, "coal": 3},
+        "description": "وسیله نقلیه هوایی بدون سرنشین",
+        "power": 30,
+        "emoji": "🚁",
+        "loss_rate": 0.25
+    },
+    "battleship": {
+        "name": "ناو جنگی",
+        "price": 3000,
+        "resources": {"iron": 40, "wood": 20},
+        "description": "کشتی جنگی با توپ های سنگین",
+        "power": 300,
+        "emoji": "🚢",
+        "loss_rate": 0.18
+    },
+    "su47": {
+        "name": "جنگنده سو-۴۷",
+        "price": 3500,
+        "resources": {"iron": 25, "coal": 15},
+        "description": "جنگنده آزمایشی روسی",
+        "power": 450,
+        "emoji": "🛩️",
+        "loss_rate": 0.12
+    },
+    "apache": {
+        "name": "هلیکوپتر آپاچی",
+        "price": 1800,
+        "resources": {"iron": 18, "coal": 8},
+        "description": "هلیکوپتر پیشرفته تهاجمی",
+        "power": 280,
+        "emoji": "🚁",
+        "loss_rate": 0.2
+    },
+    "submarine": {
+        "name": "زیردریایی هسته ای",
+        "price": 4500,
+        "resources": {"iron": 45, "coal": 25},
+        "description": "کشتی جنگی زیرآبی مخفی",
+        "power": 600,
+        "emoji": "🛳️",
+        "loss_rate": 0.15
+    }
+}
+
+DIAMOND_MINE_CONFIG = {
+    "price": 5000,
+    "production_rate": 30,  # Minutes
+    "diamond_value": 1000,  # Points per diamond
+    "starting_mines": 2
+}
+
+RESOURCE_MINE_CONFIG = {
+    "wood": {
+        "name": "کارخانه چوب",
+        "price": 1000,
+        "production_rate": 45,  # Minutes
+        "output": 10,  # Units per cycle
+        "emoji": "🪵"
+    },
+    "coal": {
+        "name": "معدن زغال سنگ",
+        "price": 1500,
+        "production_rate": 60,
+        "output": 8,
+        "emoji": "🪨"
+    },
+    "iron": {
+        "name": "معدن آهن",
+        "price": 2000,
+        "production_rate": 75,
+        "output": 5,
+        "emoji": "⛓️"
+    }
+}
+
+BATTLE_CONFIG = {
+    "min_reward": 500,
+    "max_reward": 2000,
+    "cooldown": 3600,  # 1 hour in seconds
+    "min_power_diff": 0.2,
+    "min_attack_power": 50
+}
+
+# Helper functions
+def get_user_key(chat_id, user_id):
+    return f"{chat_id}:{user_id}"
+
+def update_user_info(user):
+    """Store or update user information"""
+    user_id = str(user.user_id)
+    bot_data["user_info"][user_id] = {
+        "username": user.username,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "last_seen": datetime.now().isoformat()
+    }
+    save_data()
+
+def get_user_name(user_id):
+    """Get user's display name"""
+    info = bot_data["user_info"].get(str(user_id), {})
+    if info.get("username"):
+        return f"@{info['username']}"
+    return info.get("first_name", f"User {user_id}")
+
+def award_points(chat_id, user_id, amount):
+    key = get_user_key(chat_id, user_id)
+    if key not in bot_data["points"]:
+        bot_data["points"][key] = 0
+    bot_data["points"][key] += amount
+    save_data()
+    return bot_data["points"][key]
+
+def get_user_points(chat_id, user_id):
+    key = get_user_key(chat_id, user_id)
+    return bot_data["points"].get(key, 0)
+
+def get_user_inventory(chat_id, user_id):
+    key = get_user_key(chat_id, user_id)
+    if key not in bot_data["weapons_inventory"]:
+        bot_data["weapons_inventory"][key] = {}
+    return bot_data["weapons_inventory"][key]
+
+def get_user_resources(chat_id, user_id):
+    key = get_user_key(chat_id, user_id)
+    if key not in bot_data["resource_mines"]:
+        bot_data["resource_mines"][key] = {"wood": 0, "coal": 0, "iron": 0}
+    return bot_data["resource_mines"][key]
+
+def get_user_diamond_mines(chat_id, user_id):
+    key = get_user_key(chat_id, user_id)
+    if key not in bot_data["diamond_mines"]:
+        bot_data["diamond_mines"][key] = DIAMOND_MINE_CONFIG["starting_mines"]
+        # Set initial collection time
+        update_last_collection_time(chat_id, user_id, "diamond")
+        save_data()
+    return bot_data["diamond_mines"][key]
+
+def add_user_diamond_mine(chat_id, user_id):
+    key = get_user_key(chat_id, user_id)
+    # Ensure mines are initialized
+    current = get_user_diamond_mines(chat_id, user_id)
+    bot_data["diamond_mines"][key] = current + 1
+    save_data()
+
+def add_user_resource_mine(chat_id, user_id, resource_type):
+    key = get_user_key(chat_id, user_id)
+    resource_key = f"{key}:{resource_type}"
+    if resource_key not in bot_data["resource_mines"]:
+        bot_data["resource_mines"][resource_key] = 0
+    bot_data["resource_mines"][resource_key] += 1
+    save_data()
+
+def get_user_resource_mine_count(chat_id, user_id, resource_type):
+    key = get_user_key(chat_id, user_id)
+    resource_key = f"{key}:{resource_type}"
+    return bot_data["resource_mines"].get(resource_key, 0)
+
+def get_last_collection_time(chat_id, user_id, collection_type):
+    key = get_user_key(chat_id, user_id)
+    collection_key = f"{key}:{collection_type}"
+    collection_dict = bot_data.get(f"last_{collection_type}_collection", {})
+    return collection_dict.get(collection_key)
+
+def update_last_collection_time(chat_id, user_id, collection_type):
+    key = get_user_key(chat_id, user_id)
+    collection_key = f"{key}:{collection_type}"
+    if f"last_{collection_type}_collection" not in bot_data:
+        bot_data[f"last_{collection_type}_collection"] = {}
+    bot_data[f"last_{collection_type}_collection"][collection_key] = datetime.now().isoformat()
+    save_data()
+
+def calculate_military_power(inventory):
+    total_power = 0
+    for weapon_id, quantity in inventory.items():
+        if weapon_id in WEAPONS_SHOP:
+            total_power += WEAPONS_SHOP[weapon_id]["power"] * quantity
+    return total_power
+
+def get_leaderboard(chat_id):
+    leaderboard = []
+    # Get all users who have interacted with the bot in this chat
+    user_keys = set()
+    
+    # Add users from points
+    for key in bot_data["points"]:
+        if key.startswith(f"{chat_id}:"):
+            user_keys.add(key)
+    
+    # Add users from weapons inventory
+    for key in bot_data["weapons_inventory"]:
+        if key.startswith(f"{chat_id}:"):
+            user_keys.add(key)
+    
+    # Add users from diamond mines
+    for key in bot_data["diamond_mines"]:
+        if key.startswith(f"{chat_id}:"):
+            user_keys.add(key)
+    
+    # Add users from resource mines
+    for key in bot_data["resource_mines"]:
+        if key.startswith(f"{chat_id}:"):
+            user_keys.add(key)
+    
+    # Create leaderboard entries
+    for key in user_keys:
+        parts = key.split(":")
+        user_id = parts[1]
+        power = calculate_military_power(bot_data["weapons_inventory"].get(key, {}))
+        points = get_user_points(chat_id, user_id)
+        leaderboard.append({
+            "user_id": user_id,
+            "power": power,
+            "points": points
+        })
+    
+    leaderboard.sort(key=itemgetter("power"), reverse=True)
+    return leaderboard
+
+def calculate_diamonds_available(chat_id, user_id):
+    last_collected = get_last_collection_time(chat_id, user_id, "diamond")
+    mines = get_user_diamond_mines(chat_id, user_id)
+    
+    # Fix: Initialize last collection time if missing
+    if not last_collected:
+        update_last_collection_time(chat_id, user_id, "diamond")
+        return 0
+    
+    last_time = datetime.fromisoformat(last_collected)
+    now = datetime.now()
+    time_diff = now - last_time
+    minutes_passed = time_diff.total_seconds() / 60
+    
+    production_cycles = int(minutes_passed // DIAMOND_MINE_CONFIG["production_rate"])
+    return production_cycles * mines
+
+def calculate_resources_available(chat_id, user_id, resource_type):
+    last_collected = get_last_collection_time(chat_id, user_id, resource_type)
+    mines = get_user_resource_mine_count(chat_id, user_id, resource_type)
+    
+    if mines == 0:
+        return 0
+        
+    # Fix: Initialize last collection time if missing
+    if not last_collected:
+        update_last_collection_time(chat_id, user_id, resource_type)
+        return 0
+    
+    last_time = datetime.fromisoformat(last_collected)
+    now = datetime.now()
+    time_diff = now - last_time
+    minutes_passed = time_diff.total_seconds() / 60
+    
+    production_cycles = int(minutes_passed // RESOURCE_MINE_CONFIG[resource_type]["production_rate"])
+    return production_cycles * mines * RESOURCE_MINE_CONFIG[resource_type]["output"]
+
+def get_battle_cooldown(chat_id, user_id):
+    key = get_user_key(chat_id, user_id)
+    last_battle = bot_data["battle_history"].get(key, {}).get("last_battle")
+    if not last_battle:
+        return 0
+    elapsed = datetime.now().timestamp() - last_battle
+    return max(0, BATTLE_CONFIG["cooldown"] - elapsed)
+
+def calculate_battle_outcome(attacker_power, defender_power):
+    """Determines winner with randomness and power ratio"""
+    power_ratio = attacker_power / max(defender_power, 1)
+    win_chance = min(0.9, 0.5 + (power_ratio - 1) * 0.2)  # Caps at 90% chance
+    return random.random() < win_chance
+
+def calculate_weapon_losses(inventory, is_winner):
+    losses = {}
+    for weapon_id, quantity in inventory.items():
+        if weapon_id not in WEAPONS_SHOP or quantity <= 0:
+            continue
+            
+        base_rate = WEAPONS_SHOP[weapon_id]["loss_rate"]
+        modifier = 0.7 if is_winner else 1.3  # Winner loses fewer units
+        loss_count = max(1, int(quantity * base_rate * modifier * random.uniform(0.8, 1.2)))
+        losses[weapon_id] = min(quantity, loss_count)
+    return losses
+
+def format_weapon_losses(losses):
+    return ", ".join([f"{count} {WEAPONS_SHOP[wid]['name']}" for wid, count in losses.items()])
+
+# Initialize bot
+client = Bot(token="868869945:V2RKdBsKvh2Ew2CAPn6AvCkNMKDs43vyAoqPRZFU")
+
+# Menu Keyboard Layout
+def main_menu_keyboard():
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("🛒 فروشگاه"))
+    keyboard.add(MenuKeyboardButton("🎒 موجودی"))
+    keyboard.add(MenuKeyboardButton("⚔️ ارتش"))
+    keyboard.add(MenuKeyboardButton("💰 امتیازات"))
+    keyboard.add(MenuKeyboardButton("📦 منابع"))
+    keyboard.add(MenuKeyboardButton("🏆 رتبه بندی"))
+    keyboard.add(MenuKeyboardButton("⛏ معادن"))
+    keyboard.add(MenuKeyboardButton("💎 جمع آوری"))
+    keyboard.add(MenuKeyboardButton("⚔️ حمله"))
+    return keyboard
+
+def shop_keyboard():
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("🪖 پیاده نظام"))
+    keyboard.add(MenuKeyboardButton("⚔️ وسایل نقلیه"))
+    keyboard.add(MenuKeyboardButton("✈️ هواپیماها"))
+    keyboard.add(MenuKeyboardButton("🚢 نیروی دریایی"))
+    keyboard.add(MenuKeyboardButton("💣 ویژه"))
+    keyboard.add(MenuKeyboardButton("📦 خرید منابع"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    return keyboard
+
+def mine_menu_keyboard():
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("💎 معادن الماس"))
+    keyboard.add(MenuKeyboardButton("🪵 معادن منابع"))
+    keyboard.add(MenuKeyboardButton("🛒 خرید معدن الماس"))
+    keyboard.add(MenuKeyboardButton("🛒 خرید معدن منبع"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    return keyboard
+
+def resource_mine_types_keyboard():
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("🪵 خرید معدن چوب"))
+    keyboard.add(MenuKeyboardButton("🪨 خرید معدن زغال سنگ"))
+    keyboard.add(MenuKeyboardButton("⛓️ خرید معدن آهن"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    return keyboard
+
+def resource_types_keyboard():
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("🪵 خرید چوب"))
+    keyboard.add(MenuKeyboardButton("🪨 خرید زغال سنگ"))
+    keyboard.add(MenuKeyboardButton("⛓️ خرید آهن"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    return keyboard
+
+def back_only_keyboard():
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    return keyboard
+
+def get_attack_keyboard(chat_id):
+    """Create inline keyboard for attack targets"""
+    leaderboard = get_leaderboard(chat_id)[:10]  # Top 10 players
+    keyboard = InlineKeyboard()
+    
+    for player in leaderboard:
+        user_name = get_user_name(player["user_id"])
+        keyboard.add(InlineKeyboardButton(
+            f"⚔️ حمله به {user_name}",
+            callback_data=f"attack_{player['user_id']}"
+        ))
+    
+    return keyboard
+
+HELP_TEXT = f"""
+🎮 **ربات فرمانده جنگ** 🎮
+امپراتوری خود را بسازید، منابع جمع آوری کنید، سلاح تولید کنید و دشمنان را فتح کنید!
+
+**دستورات اصلی:**
+- از دکمه‌های زیر برای دسترسی سریع استفاده کنید
+- `/attack` - حمله به بازیکن دیگر
+- `/help` - نمایش راهنما
+
+**ویژگی‌های بازی:**
+- 💎 معادن الماس امتیاز تولید می‌کنند
+- ⛏ معادن منابع (چوب، زغال سنگ، آهن) برای تولید
+- 🏭 سیستم کارخانه برای ایجاد واحدهای نظامی
+- ⚔️ سیستم نبرد با پاداش و تلفات
+- 🏆 جدول رتبه بندی برای پیگیری بهترین بازیکنان
+- 🛒 خرید منابع مستقیم از بازار
+
+برای شروع از دکمه‌های زیر استفاده کنید!
+"""
+
+# Event handlers
+@client.event
+async def on_ready():
+    print(f"{client.user.username} آماده است!")
+
+@client.event
+async def on_message(message: Message):
+    if message.content is None:
+        return
+    
+    content = message.content.strip()
+    content_lower = content.lower()
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    
+    # Update user info
+    update_user_info(message.author)
+    
+    # Command handlers
+    if content_lower in ["/start", "/help"]:
+        await message.reply(HELP_TEXT, components=main_menu_keyboard())
+    elif content_lower == "/attack":
+        await show_attack_targets(message)
+    elif content_lower == "/shop":
+        await show_weapons_shop(message)
+    elif content_lower == "/inventory":
+        await show_inventory(message)
+    elif content_lower == "/military":
+        await show_military_power(message)
+    elif content_lower == "/points":
+        await show_points(message)
+    elif content_lower == "/resources":
+        await show_resources(message)
+    elif content_lower == "/leaderboard":
+        await show_leaderboard(message)
+    elif content_lower == "/collect":
+        await collect_all(message)
+    elif content_lower == "/mines":
+        await show_mines_menu(message)
+    elif content_lower.startswith("/buy_"):
+        if content_lower.startswith("/buydiamondmine"):
+            await buy_diamond_mine(message)
+        elif content_lower.startswith("/buyresourcemine"):
+            await buy_resource_mine(message)
+        elif content_lower.startswith("/buyresource"):
+            await buy_resource(message)
+        else:
+            await buy_weapon(message)
+    
+    # Handle button presses
+    elif content == "🛒 فروشگاه":
+        await show_weapons_shop(message)
+    elif content == "🎒 موجودی":
+        await show_inventory(message)
+    elif content == "⚔️ ارتش":
+        await show_military_power(message)
+    elif content == "💰 امتیازات":
+        await show_points(message)
+    elif content == "📦 منابع":
+        await show_resources(message)
+    elif content == "🏆 رتبه بندی":
+        await show_leaderboard(message)
+    elif content == "⛏ معادن":
+        await show_mines_menu(message)
+    elif content == "💎 جمع آوری":
+        await collect_all(message)
+    elif content == "⚔️ حمله":
+        await show_attack_targets(message)
+    elif content == "🔙 بازگشت":
+        await message.reply(HELP_TEXT, components=main_menu_keyboard())
+    elif content == "🪖 پیاده نظام":
+        await show_weapon_category(message, "infantry")
+    elif content == "⚔️ وسایل نقلیه":
+        await show_weapon_category(message, "vehicles")
+    elif content == "✈️ هواپیماها":
+        await show_weapon_category(message, "aircraft")
+    elif content == "🚢 نیروی دریایی":
+        await show_weapon_category(message, "naval")
+    elif content == "💣 ویژه":
+        await show_weapon_category(message, "special")
+    elif content == "📦 خرید منابع":
+        await show_resource_shop(message)
+    elif content == "💎 معادن الماس":
+        await show_diamond_mines_status(message)
+    elif content == "🪵 معادن منابع":
+        await show_resource_mines_status(message)
+    elif content == "🛒 خرید معدن الماس":
+        await buy_diamond_mine(message)
+    elif content == "🛒 خرید معدن منبع":
+        await show_resource_mine_types(message)
+    elif content == "🪵 خرید معدن چوب":
+        await buy_resource_mine(message, "wood")
+    elif content == "🪨 خرید معدن زغال سنگ":
+        await buy_resource_mine(message, "coal")
+    elif content == "⛓️ خرید معدن آهن":
+        await buy_resource_mine(message, "iron")
+    elif content == "🪵 خرید چوب":
+        await buy_resource(message, "wood")
+    elif content == "🪨 خرید زغال سنگ":
+        await buy_resource(message, "coal")
+    elif content == "⛓️ خرید آهن":
+        await buy_resource(message, "iron")
+
+@client.event
+async def on_callback_query(callback_query):
+    data = callback_query.data
+    chat_id = str(callback_query.message.chat.id)
+    user_id = str(callback_query.from_user.user_id)
+    
+    if data.startswith("attack_"):
+        defender_id = data.split("_")[1]
+        await attack_player(callback_query.message, defender_id)
+    
+    await callback_query.answer()
+
+# Text-based command handlers
+async def show_attack_targets(message: Message):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    
+    # Check cooldown
+    cooldown = get_battle_cooldown(chat_id, user_id)
+    if cooldown > 0:
+        minutes = int(cooldown // 60)
+        seconds = int(cooldown % 60)
+        await message.reply(f"⏳ باید {minutes} دقیقه و {seconds} ثانیه صبر کنید قبل از حمله مجدد!")
+        return
+    
+    keyboard = get_attack_keyboard(chat_id)
+    await message.reply(
+        "⚔️ **هدف حمله را انتخاب کنید**\n"
+        "لیست ۱۰ بازیکن برتر:",
+        components=keyboard
+    )
+
+async def show_weapons_shop(message: Message):
+    await message.reply(
+        "🏪 **فروشگاه سلاح**\nیک دسته را انتخاب کنید:",
+        components=shop_keyboard()
+    )
+
+async def show_weapon_category(message: Message, category: str):
+    categories = {
+        "infantry": ["soldier"],
+        "vehicles": ["tank", "apache"],
+        "aircraft": ["fighter_jet", "su47", "drone"],
+        "naval": ["battleship", "submarine"],
+        "special": ["nuke"]
+    }
+    
+    response = f"🔫 **سلاح‌های {category}**\n\n"
+    for weapon_id in categories.get(category, []):
+        weapon = WEAPONS_SHOP[weapon_id]
+        resource_cost = ""
+        for r_type, amount in weapon.get("resources", {}).items():
+            emoji = RESOURCE_TYPES[r_type]["emoji"]
+            resource_cost += f"{emoji} {amount} "
+        
+        response += (
+            f"{weapon['emoji']} **{weapon['name']}**\n"
+            f"⚔️ قدرت: {weapon['power']} | 💰 قیمت: {weapon['price']} امتیاز\n"
+            f"📦 منابع: {resource_cost.strip()}\n"
+            f"📝 {weapon['description']}\n"
+            f"برای خرید: /buy_{weapon_id}\n\n"
+        )
+    
+    await message.reply(response, components=back_only_keyboard())
+
+async def show_resource_shop(message: Message):
+    response = "🛒 **بازار منابع**\nخرید مستقیم منابع:\n\n"
+    for r_type, info in RESOURCE_TYPES.items():
+        response += (
+            f"{info['emoji']} **{info['name']}**\n"
+            f"💰 قیمت: {info['price']} امتیاز به ازای هر واحد\n"
+            f"برای خرید از دکمه‌های زیر استفاده کنید\n\n"
+        )
+    
+    await message.reply(
+        response,
+        components=resource_types_keyboard()
+    )
+
+async def buy_resource(message: Message, resource_type=None):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    
+    # If resource type not provided, try to get from command
+    if resource_type is None:
+        parts = message.content.strip().split()
+        if len(parts) < 2:
+            await message.reply("❌ روش استفاده: /buyresource <wood|coal|iron> <مقدار>")
+            return
+        resource_type = parts[1].lower()
+    
+    if resource_type not in RESOURCE_TYPES:
+        await message.reply("❌ نوع منبع نامعتبر است. از بین موارد زیر انتخاب کنید: wood, coal, iron")
+        return
+    
+    # Get amount (default to 1 if not specified)
+    amount = 1
+    if len(message.content.split()) > 2:
+        try:
+            amount = int(message.content.split()[2])
+            if amount < 1:
+                amount = 1
+            elif amount > 1000:
+                amount = 1000
+        except:
+            amount = 1
+    
+    resource_info = RESOURCE_TYPES[resource_type]
+    total_cost = resource_info["price"] * amount
+    user_points = get_user_points(chat_id, user_id)
+    
+    if user_points < total_cost:
+        await message.reply(
+            f"❌ امتیاز کافی ندارید! شما به {total_cost} امتیاز نیاز دارید "
+            f"ولی فقط {user_points} امتیاز دارید."
+        )
+        return
+    
+    # Deduct points and add resources
+    award_points(chat_id, user_id, -total_cost)
+    resources = get_user_resources(chat_id, user_id)
+    resources[resource_type] = resources.get(resource_type, 0) + amount
+    save_data()
+    
+    await message.reply(
+        f"✅ با موفقیت {amount} {resource_info['emoji']} {resource_info['name']} خریداری شد! "
+        f"به مبلغ {total_cost} امتیاز!\n"
+        f"موجودی جدید شما: {get_user_points(chat_id, user_id)} امتیاز\n"
+        f"مجموع {resource_info['name']}: {resources[resource_type]}"
+    )
+
+async def show_inventory(message: Message):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    inventory = get_user_inventory(chat_id, user_id)
+    
+    if not inventory:
+        await message.reply(
+            "🎒 موجودی شما خالی است.\nبرای خرید سلاح به فروشگاه مراجعه کنید!",
+            components=MenuKeyboardMarkup().add(MenuKeyboardButton("🛒 فروشگاه")))
+        return
+    
+    inventory_text = "🎒 **موجودی سلاح‌های شما** 🎒\n\n"
+    total_power = 0
+    
+    for weapon_id, quantity in inventory.items():
+        if weapon_id in WEAPONS_SHOP:
+            weapon = WEAPONS_SHOP[weapon_id]
+            power_contribution = weapon['power'] * quantity
+            inventory_text += f"{weapon['emoji']} {weapon['name']} x{quantity} (⚔️ {power_contribution})\n"
+            total_power += power_contribution
+    
+    inventory_text += f"\n**مجموع قدرت نظامی**: ⚔️ {total_power}"
+    
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("🛒 فروشگاه"))
+    keyboard.add(MenuKeyboardButton("⚔️ حمله"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    
+    await message.reply(inventory_text, components=keyboard)
+
+async def show_military_power(message: Message):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    inventory = get_user_inventory(chat_id, user_id)
+    total_power = calculate_military_power(inventory)
+    
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("🎒 موجودی"))
+    keyboard.add(MenuKeyboardButton("🛒 فروشگاه"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    
+    await message.reply(
+        f"⚔️ **قدرت نظامی شما** ⚔️\n"
+        f"**مجموع**: {total_power}\n\n"
+        f"برای جزئیات بیشتر موجودی خود را ببینید",
+        components=keyboard
+    )
+
+async def show_points(message: Message):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    points = get_user_points(chat_id, user_id)
+    
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("⛏ جمع آوری"))
+    keyboard.add(MenuKeyboardButton("🛒 فروشگاه"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    
+    await message.reply(
+        f"💰 **موجودی امتیازات شما** 💰\n"
+        f"**مجموع**: {points} امتیاز\n\n"
+        f"برای کسب امتیاز بیشتر از معادن جمع آوری کنید یا در نبردها پیروز شوید!",
+        components=keyboard
+    )
+
+async def show_resources(message: Message):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    resources = get_user_resources(chat_id, user_id)
+    
+    resource_text = "📦 **منابع شما** 📦\n\n"
+    for r_type, info in RESOURCE_TYPES.items():
+        emoji = info["emoji"]
+        name = info["name"]
+        amount = resources.get(r_type, 0)
+        resource_text += f"{emoji} **{name}**: {amount}\n"
+    
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("⛏ جمع آوری"))
+    keyboard.add(MenuKeyboardButton("🛒 فروشگاه"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    
+    await message.reply(resource_text, components=keyboard)
+
+async def show_leaderboard(message: Message):
+    chat_id = str(message.chat.id)
+    leaderboard = get_leaderboard(chat_id)
+    
+    if not leaderboard:
+        await message.reply(
+            "🏆 **جدول رتبه بندی** 🏆\n\n"
+            "هنوز بازیکنی وجود ندارد! برای ظاهر شدن در جدول رتبه بندی سلاح بخرید.",
+            components=MenuKeyboardMarkup().add(MenuKeyboardButton("🛒 فروشگاه")))
+        return
+    
+    leaderboard_text = "🏆 **جدول رتبه بندی قدرت نظامی** 🏆\n\n"
+    
+    for index, player in enumerate(leaderboard[:10], 1):  # Show top 10
+        username = get_user_name(player["user_id"])
+            
+        leaderboard_text += (
+            f"{index}. **{username}**\n"
+            f"⚔️ قدرت: {player['power']} | 💰 امتیاز: {player['points']}\n\n"
+        )
+    
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("⚔️ حمله"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    
+    await message.reply(leaderboard_text, components=keyboard)
+
+async def collect_all(message: Message):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    collected_resources = {}
+    response = "⛏ **گزارش جمع آوری** ⛏\n\n"
+    
+    # Collect diamonds
+    diamonds = calculate_diamonds_available(chat_id, user_id)
+    if diamonds > 0:
+        earnings = diamonds * DIAMOND_MINE_CONFIG["diamond_value"]
+        award_points(chat_id, user_id, earnings)
+        update_last_collection_time(chat_id, user_id, "diamond")
+        response += f"💎 **الماس جمع آوری شده**: {diamonds} (💰 +{earnings} امتیاز)\n"
+    
+    # Collect resources
+    for resource_type in RESOURCE_TYPES:
+        amount = calculate_resources_available(chat_id, user_id, resource_type)
+        if amount > 0:
+            resources = get_user_resources(chat_id, user_id)
+            resources[resource_type] = resources.get(resource_type, 0) + amount
+            update_last_collection_time(chat_id, user_id, resource_type)
+            collected_resources[resource_type] = amount
+    
+    if collected_resources:
+        response += "\n📦 **منابع جمع آوری شده**:\n"
+        for r_type, amount in collected_resources.items():
+            emoji = RESOURCE_TYPES[r_type]["emoji"]
+            name = RESOURCE_TYPES[r_type]["name"]
+            response += f"{emoji} **{name}**: +{amount}\n"
+    
+    if diamonds == 0 and not collected_resources:
+        response += "⏳ هنوز چیزی برای جمع آوری وجود ندارد. معادن شما هنوز در حال کار هستند!"
+    else:
+        response += f"\n💰 **موجودی جدید**: {get_user_points(chat_id, user_id)} امتیاز"
+    
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("⛏ وضعیت معادن"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    
+    await message.reply(response, components=keyboard)
+
+async def show_mines_menu(message: Message):
+    await message.reply(
+        "⛏ **مدیریت معادن** ⛏\n\n"
+        "مدیریت معادن الماس و منابع خود",
+        components=mine_menu_keyboard()
+    )
+
+async def show_resource_mine_types(message: Message):
+    response = "🛒 **خرید معدن منبع**\nنوع معدن را انتخاب کنید:\n\n"
+    for r_type, config in RESOURCE_MINE_CONFIG.items():
+        response += (
+            f"{config['emoji']} **{config['name']}**\n"
+            f"💰 قیمت: {config['price']} امتیاز\n"
+            f"📦 تولید: {config['output']} {RESOURCE_TYPES[r_type]['name']} "
+            f"هر {config['production_rate']} دقیقه\n\n"
+        )
+    
+    await message.reply(
+        response,
+        components=resource_mine_types_keyboard()
+    )
+
+async def show_diamond_mines_status(message: Message):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    mines = get_user_diamond_mines(chat_id, user_id)
+    last_collected = get_last_collection_time(chat_id, user_id, "diamond")
+    
+    status_text = "💎 **وضعیت معادن الماس** 💎\n\n"
+    status_text += f"**مجموع معادن**: {mines}\n"
+    
+    if last_collected:
+        last_time = datetime.fromisoformat(last_collected)
+        next_collection = last_time + timedelta(minutes=DIAMOND_MINE_CONFIG["production_rate"])
+        now = datetime.now()
+        
+        if now >= next_collection:
+            diamonds_available = calculate_diamonds_available(chat_id, user_id)
+            status_text += f"💎 **الماس آماده**: {diamonds_available} (💰 {diamonds_available * DIAMOND_MINE_CONFIG['diamond_value']} امتیاز)\n"
+        else:
+            wait_time = next_collection - now
+            wait_minutes = max(0, int(wait_time.total_seconds() / 60))
+            status_text += f"⏳ **جمع آوری بعدی در**: {wait_minutes} دقیقه\n"
+    else:
+        status_text += "⏳ معادن شما تازه شروع به کار کرده‌اند!\n"
+        status_text += f"**اولین جمع آوری در**: {DIAMOND_MINE_CONFIG['production_rate']} دقیقه\n"
+    
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("💎 جمع آوری"))
+    keyboard.add(MenuKeyboardButton("🛒 خرید معدن الماس"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    
+    await message.reply(status_text, components=keyboard)
+
+async def show_resource_mines_status(message: Message):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    status_text = "⛏ **وضعیت معادن منابع** ⛏\n\n"
+    
+    for resource_type, config in RESOURCE_MINE_CONFIG.items():
+        mine_count = get_user_resource_mine_count(chat_id, user_id, resource_type)
+        last_collected = get_last_collection_time(chat_id, user_id, resource_type)
+        resource_info = RESOURCE_TYPES[resource_type]
+        
+        status_text += f"{config['emoji']} **{config['name']}**: {mine_count}\n"
+        
+        if last_collected:
+            last_time = datetime.fromisoformat(last_collected)
+            next_collection = last_time + timedelta(minutes=config["production_rate"])
+            now = datetime.now()
+            
+            if now >= next_collection:
+                resources_available = calculate_resources_available(chat_id, user_id, resource_type)
+                status_text += f"  {resource_info['emoji']} **{resource_info['name']} آماده**: {resources_available}\n"
+            else:
+                wait_time = next_collection - now
+                wait_minutes = max(0, int(wait_time.total_seconds() / 60))
+                status_text += f"  ⏳ **جمع آوری بعدی در**: {wait_minutes} دقیقه\n"
+        elif mine_count > 0:
+            status_text += f"  ⏳ **اولین جمع آوری در**: {config['production_rate']} دقیقه\n"
+        
+        status_text += "\n"
+    
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("💎 جمع آوری"))
+    keyboard.add(MenuKeyboardButton("🛒 خرید معدن منبع"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    
+    await message.reply(status_text, components=keyboard)
+
+# Resource and mine commands
+async def buy_diamond_mine(message: Message):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    price = DIAMOND_MINE_CONFIG["price"]
+    user_points = get_user_points(chat_id, user_id)
+    
+    if user_points < price:
+        await message.reply(f"❌ امتیاز کافی ندارید! شما به {price} امتیاز نیاز دارید ولی فقط {user_points} امتیاز دارید.")
+        return
+    
+    # Deduct points and add mine
+    award_points(chat_id, user_id, -price)
+    add_user_diamond_mine(chat_id, user_id)
+    
+    await message.reply(
+        f"✅ معدن الماس با موفقیت به مبلغ {price} امتیاز خریداری شد!\n"
+        f"اکنون {get_user_diamond_mines(chat_id, user_id)} معدن الماس دارید.\n"
+        f"موجودی جدید شما: {get_user_points(chat_id, user_id)} امتیاز"
+    )
+
+async def buy_resource_mine(message: Message, resource_type=None):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    
+    # If resource type not provided, try to get from command
+    if resource_type is None:
+        if hasattr(message, 'content') and message.content:
+            parts = message.content.strip().split()
+            if len(parts) < 2:
+                await message.reply("❌ روش استفاده: /buyresourcemine <wood|coal|iron>")
+                return
+            resource_type = parts[1].lower()
+        else:
+            # Try to get from button context
+            if message == "🪵 خرید معدن چوب":
+                resource_type = "wood"
+            elif message == "🪨 خرید معدن زغال سنگ":
+                resource_type = "coal"
+            elif message == "⛓️ خرید معدن آهن":
+                resource_type = "iron"
+            else:
+                await message.reply("❌ لطفا نوع منبع را مشخص کنید")
+                return
+    
+    if resource_type not in RESOURCE_MINE_CONFIG:
+        await message.reply(f"❌ نوع منبع نامعتبر است. از بین موارد زیر انتخاب کنید: wood, coal, iron")
+        return
+    
+    config = RESOURCE_MINE_CONFIG[resource_type]
+    user_points = get_user_points(chat_id, user_id)
+    
+    if user_points < config["price"]:
+        await message.reply(f"❌ امتیاز کافی ندارید! شما به {config['price']} امتیاز نیاز دارید ولی فقط {user_points} امتیاز دارید.")
+        return
+    
+    # Deduct points and add mine
+    award_points(chat_id, user_id, -config["price"])
+    add_user_resource_mine(chat_id, user_id, resource_type)
+    
+    await message.reply(
+        f"✅ {config['name']} با موفقیت به مبلغ {config['price']} امتیاز خریداری شد!\n"
+        f"اکنون {get_user_resource_mine_count(chat_id, user_id, resource_type)} {config['name']} دارید.\n"
+        f"موجودی جدید شما: {get_user_points(chat_id, user_id)} امتیاز"
+    )
+
+async def buy_weapon(message: Message):
+    chat_id = str(message.chat.id)
+    user_id = str(message.author.user_id)
+    content = message.content.strip().lower()
+    
+    weapon_id = content[5:]  # Remove "/buy_"
+    
+    if weapon_id not in WEAPONS_SHOP:
+        await message.reply("❌ سلاح نامعتبر. برای دیدن سلاح‌های موجود /shop را ببینید.")
+        return
+    
+    weapon = WEAPONS_SHOP[weapon_id]
+    user_points = get_user_points(chat_id, user_id)
+    
+    # Check point cost
+    if user_points < weapon["price"]:
+        await message.reply(f"❌ امتیاز کافی ندارید! شما به {weapon['price']} امتیاز نیاز دارید ولی فقط {user_points} امتیاز دارید.")
+        return
+    
+    # Check resource costs
+    missing_resources = []
+    user_resources = get_user_resources(chat_id, user_id)
+    for r_type, required in weapon.get("resources", {}).items():
+        if user_resources.get(r_type, 0) < required:
+            missing_resources.append(f"{RESOURCE_TYPES[r_type]['emoji']} {RESOURCE_TYPES[r_type]['name']} (نیاز {required}, دارید {user_resources.get(r_type, 0)})")
+    
+    if missing_resources:
+        await message.reply(f"❌ منابع کافی ندارید!\n" + "\n".join(missing_resources))
+        return
+    
+    # Deduct costs
+    award_points(chat_id, user_id, -weapon["price"])
+    for r_type, required in weapon.get("resources", {}).items():
+        user_resources[r_type] -= required
+    
+    # Add to inventory
+    inventory = get_user_inventory(chat_id, user_id)
+    inventory[weapon_id] = inventory.get(weapon_id, 0) + 1
+    save_data()
+    
+    # Build success message
+    resource_cost = ""
+    for r_type, amount in weapon.get("resources", {}).items():
+        emoji = RESOURCE_TYPES[r_type]["emoji"]
+        resource_cost += f"{emoji} {amount} "
+    
+    await message.reply(
+        f"✅ با موفقیت 1 عدد {weapon['name']} خریداری شد!\n"
+        f"💵 هزینه: {weapon['price']} امتیاز\n"
+        f"📦 منابع: {resource_cost.strip()}\n"
+        f"موجودی جدید شما: {get_user_points(chat_id, user_id)} امتیاز"
+    )
+
+# Battle command
+async def attack_player(message: Message, defender_id: str):
+    chat_id = str(message.chat.id)
+    attacker_id = str(message.author.user_id)
+    
+    if attacker_id == defender_id:
+        await message.reply("❌ نمی‌توانید به خودتان حمله کنید!")
+        return
+    
+    # Initialize defender data if not exists
+    get_user_inventory(chat_id, defender_id)
+    get_user_points(chat_id, defender_id)
+    
+    # Get military powers
+    attacker_inv = get_user_inventory(chat_id, attacker_id)
+    defender_inv = get_user_inventory(chat_id, defender_id)
+    
+    attacker_power = calculate_military_power(attacker_inv)
+    defender_power = calculate_military_power(defender_inv)
+    
+    if attacker_power < BATTLE_CONFIG["min_attack_power"]:
+        await message.reply(f"❌ برای حمله به حداقل {BATTLE_CONFIG['min_attack_power']} قدرت نیاز دارید!")
+        return
+        
+    power_diff = abs(attacker_power - defender_power) / max(attacker_power, defender_power, 1)
+    if power_diff < BATTLE_CONFIG["min_power_diff"]:
+        await message.reply(f"❌ برای حمله به حداقل {BATTLE_CONFIG['min_power_diff']*100:.0f}% اختلاف قدرت نیاز است!")
+        return
+    
+    # Calculate battle outcome
+    attacker_won = calculate_battle_outcome(attacker_power, defender_power)
+    reward = random.randint(BATTLE_CONFIG["min_reward"], BATTLE_CONFIG["max_reward"])
+    
+    # Calculate losses
+    attacker_losses = calculate_weapon_losses(attacker_inv, attacker_won)
+    defender_losses = calculate_weapon_losses(defender_inv, not attacker_won)
+    
+    # Apply losses
+    for weapon_id, loss_count in attacker_losses.items():
+        attacker_inv[weapon_id] -= loss_count
+        if attacker_inv[weapon_id] <= 0:
+            del attacker_inv[weapon_id]
+    
+    for weapon_id, loss_count in defender_losses.items():
+        defender_inv[weapon_id] -= loss_count
+        if defender_inv[weapon_id] <= 0:
+            del defender_inv[weapon_id]
+    
+    # Award points
+    if attacker_won:
+        award_points(chat_id, attacker_id, reward)
+        result_title = f"⚔️ {get_user_name(attacker_id)} پیروز شد! ⚔️"
+        result_msg = f"{get_user_name(defender_id)} را شکست داد و {reward} امتیاز کسب کرد!"
+    else:
+        award_points(chat_id, defender_id, reward)
+        result_title = f"💥 {get_user_name(attacker_id)} شکست خورد! 💥"
+        result_msg = f"{get_user_name(defender_id)} با موفقیت دفاع کرد و {reward} امتیاز کسب کرد!"
+    
+    # Update battle history
+    attacker_key = get_user_key(chat_id, attacker_id)
+    bot_data["battle_history"].setdefault(attacker_key, {})["last_battle"] = datetime.now().timestamp()
+    save_data()
+    
+    # Build battle report
+    report = (
+        f"{result_title}\n"
+        f"{result_msg}\n\n"
+        f"**قدرت حمله کننده**: ⚔️ {attacker_power}\n"
+        f"**قدرت مدافع**: ⚔️ {defender_power}\n\n"
+    )
+    
+    if attacker_losses:
+        report += f"**حمله کننده از دست داد**: {format_weapon_losses(attacker_losses)}\n"
+    if defender_losses:
+        report += f"**مدافع از دست داد**: {format_weapon_losses(defender_losses)}\n"
+    
+    report += f"\n**حمله بعدی پس از 1 ساعت امکان‌پذیر است.**"
+    
+    keyboard = MenuKeyboardMarkup()
+    keyboard.add(MenuKeyboardButton("🎒 موجودی"))
+    keyboard.add(MenuKeyboardButton("🛒 فروشگاه"))
+    keyboard.add(MenuKeyboardButton("🔙 بازگشت"))
+    
+    await message.reply(report, components=keyboard)
+
+# Run the bot
+client.run()

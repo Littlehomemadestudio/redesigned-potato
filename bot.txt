@@ -1,0 +1,1111 @@
+add a /clean function to this code so the bot deletes his messages and user commands also replace the militry assets with reallife alternatives like abram tank import os
+import json
+import time
+import random
+import asyncio
+import traceback
+from datetime import datetime, timedelta
+from bale import Bot, Message, User, Chat, ChatMember
+
+# -------------------- CONFIGURATION --------------------
+TOKEN = "1014684452:DsvPJv7fND2xZcx7C4VfydXiJDfDnBhvL1nitb4S"  # توکن ربات خود را اینجا قرار دهید
+DATA_FILE = "group_data.json"
+
+# Initialize bot
+bot = Bot(token=TOKEN)
+
+# -------------------- GAME CONFIGURATION --------------------
+# Military assets with costs, power, and names
+MILITARY_ASSETS = {
+    # Tanks
+    "light_tank": {"cost": 50, "power": 5, "name": "تانک سبک"},
+    "medium_tank": {"cost": 100, "power": 10, "name": "تانک متوسط"},
+    "heavy_tank": {"cost": 200, "power": 20, "name": "تانک سنگین"},
+    "super_tank": {"cost": 500, "power": 50, "name": "تانک فوق سنگین"},
+    
+    # Aircraft
+    "fighter": {"cost": 100, "power": 15, "name": "هواپیمای جنگنده"},
+    "bomber": {"cost": 250, "power": 35, "name": "هواپیمای بمب افکن"},
+    "stealth": {"cost": 500, "power": 70, "name": "هواپیمای استیلث"},
+    "drone": {"cost": 150, "power": 25, "name": "پهپاد نظامی"},
+    
+    # Missiles
+    "missile": {"cost": 300, "power": 60, "name": "موشک"},
+    "ballistic_missile": {"cost": 1000, "power": 200, "name": "موشک بالستیک"},
+    "cruise_missile": {"cost": 800, "power": 150, "name": "موشک کروز"},
+    
+    # Navy
+    "warship": {"cost": 1200, "power": 250, "name": "ناو جنگی"},
+    "submarine": {"cost": 1500, "power": 300, "name": "زیردریایی"},
+    "aircraft_carrier": {"cost": 5000, "power": 1000, "name": "ناو هواپیمابر"},
+    
+    # Infantry
+    "soldier": {"cost": 10, "power": 1, "name": "سرباز"},
+    "special_forces": {"cost": 100, "power": 15, "name": "نیروی ویژه"},
+    
+    # Artillery
+    "artillery": {"cost": 300, "power": 55, "name": "توپخانه"},
+    "rocket_launcher": {"cost": 400, "power": 70, "name": "سامانه راکت انداز"},
+    
+    # Defense Systems
+    "anti_air": {"cost": 350, "power": 60, "name": "ضدهوایی"},
+    "radar": {"cost": 200, "power": 10, "name": "رادار"},
+}
+
+BASE_POINTS_PER_MESSAGE = 2000
+COOLDOWN_MINUTES = 0  # Cooldown between earning points from messages
+
+# -------------------- DATA MANAGEMENT --------------------
+group_data = {}
+
+def load_data():
+    """بارگذاری داده‌های گروه از فایل"""
+    global group_data
+    try:
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            group_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        group_data = {}
+        print("No existing data file found or invalid JSON, starting with empty data")
+
+def save_data():
+    """ذخیره داده‌های گروه در فایل"""
+    try:
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(group_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error saving data: {e}")
+
+def get_chat_data(chat_id):
+    """دریافت یا ایجاد داده برای یک چت خاص"""
+    chat_id_str = str(chat_id)
+    if chat_id_str not in group_data:
+        group_data[chat_id_str] = {
+            "owner_id": None,
+            "warnings": {},
+            "muted_users": {},
+            "rules": "قوانین گروه هنوز تنظیم نشده است.",
+            "welcome_message": "به گروه خوش آمدید! لطفا قوانین را مطالعه کنید.",
+            "admins": [],
+            "users": {},  # Store user game data
+            "alliances": {}  # Store alliance data
+        }
+    return group_data[chat_id_str]
+
+def get_user_data(chat_id, user_id):
+    """دریافت یا ایجاد داده برای یک کاربر خاص در یک چت"""
+    chat_data = get_chat_data(chat_id)
+    user_id_str = str(user_id)
+    
+    if user_id_str not in chat_data["users"]:
+        chat_data["users"][user_id_str] = {
+            "points": 0,
+            "last_message_time": 0,
+            "military": {},  # Unified military storage
+            "battles_won": 0,
+            "battles_lost": 0,
+            "alliance": None  # Name of alliance user belongs to
+        }
+    
+    # Initialize all military types if not present
+    user_data = chat_data["users"][user_id_str]
+    for asset_type in MILITARY_ASSETS:
+        if asset_type not in user_data["military"]:
+            user_data["military"][asset_type] = 0
+    
+    return user_data
+
+# -------------------- HELPER FUNCTIONS --------------------
+def is_owner(user_id, chat_id):
+    """بررسی آیا کاربر صاحب گروه است"""
+    chat_data = get_chat_data(chat_id)
+    return chat_data["owner_id"] == user_id
+
+def format_time(seconds):
+    """قالب‌بندی زمان به رشته قابل خواندن"""
+    if seconds < 60:
+        return f"{seconds} ثانیه"
+    elif seconds < 3600:
+        return f"{seconds//60} دقیقه"
+    elif seconds < 86400:
+        return f"{seconds//3600} ساعت"
+    else:
+        return f"{seconds//86400} روز"
+
+async def delete_message_safe(message, delay=0):
+    """حذف ایمن پیام پس از تاخیر"""
+    try:
+        await asyncio.sleep(delay)
+        await message.delete()
+        
+    except:
+        pass  # Ignore errors if we can't delete the message
+
+
+def calculate_total_power(user_data):
+    """محاسبه قدرت کل نظامی کاربر"""
+    total_power = 0
+    
+    # محاسبه قدرت تمام دارایی‌های نظامی
+    for asset_type, count in user_data["military"].items():
+        if asset_type in MILITARY_ASSETS and count > 0:
+            asset_power = MILITARY_ASSETS[asset_type]["power"]
+            total_power += asset_power * count
+    
+    return total_power
+
+def get_asset_display_name(asset_type):
+    """Get the display name for a military asset"""
+    return MILITARY_ASSETS.get(asset_type, {}).get("name", asset_type)
+
+def get_asset_cost(asset_type):
+    """Get the cost for a military asset"""
+    return MILITARY_ASSETS.get(asset_type, {}).get("cost", 0)
+
+# -------------------- BOT COMMANDS --------------------
+@bot.event
+async def on_ready():
+    """هندلر راه‌اندازی ربات"""
+    print(f"{bot.user.username} token auth")
+    load_data()
+
+@bot.event
+async def on_message(message: Message):
+    """مدیریت پیام‌های دریافتی"""
+    try:
+        # نادیده گرفتن پیام‌های ربات‌ها
+        if message.author.is_bot:
+            return
+
+        chat_id = message.chat.id
+        user_id = message.author.user_id
+        text = message.content or ""
+        
+        # اعطای امتیاز برای پیام‌های کاربر
+        await handle_points(message, chat_id, user_id)
+        
+        # مدیریت دستورات
+        if text.startswith("/"):
+            await handle_command(message, text.lower(), chat_id, user_id)
+            
+    except Exception as e:
+        print(f"خطا در on_message: {e}")
+        print(traceback.format_exc())
+        try:
+            await message.reply("⚠️ خطایی رخ داد!")
+        except:
+            print("Also failed to send error message")
+
+async def handle_points(message, chat_id, user_id):
+    """اعطای امتیاز به کاربر برای فعالیت"""
+    try:
+        user_data = get_user_data(chat_id, user_id)
+        current_time = time.time()
+        
+        # بررسی کول داون
+        if current_time - user_data["last_message_time"] >= COOLDOWN_MINUTES * 60:
+            user_data["points"] += BASE_POINTS_PER_MESSAGE
+            user_data["last_message_time"] = current_time
+            save_data()
+    except Exception as e:
+        print(f"Error in handle_points: {e}")
+
+async def handle_command(message, command, chat_id, user_id):
+    """پردازش دستورات ربات"""
+    try:
+        # دستورات عمومی
+        if command == "/start":
+            await message.reply("🤖 ربات مدیریت گروه فعال است!\n\n"
+                              "دستورات قابل استفاده:\n"
+                              "/help - راهنمایی\n"
+                              "/rules - نمایش قوانین\n"
+                              "/info - اطلاعات کاربر\n"
+                              "/game_help - راهنمای بازی")
+        
+        elif command == "/help":
+            await show_help(message)
+
+        elif command == "/rules":
+            await show_rules(message, chat_id)
+        
+        elif command == "/info":
+            await user_info(message)
+        
+        elif command == "/game_help":
+            await game_help(message)
+        
+        # دستورات بازی
+        elif command == "/points":
+            await show_points(message, chat_id, user_id)
+        
+        elif command == "/military":
+            await show_military(message, chat_id, user_id)
+        
+        elif command.startswith("/buy"):
+            await buy_asset(message, chat_id, user_id)
+        
+        elif command.startswith("/attack"):
+            await attack_user(message, chat_id, user_id)
+        
+        # دستورات اتحاد
+        elif command.startswith("/alliance"):
+            await handle_alliance_command(message, chat_id, user_id)
+        
+        # دستورات مالک
+        elif command.startswith("/setowner") and await is_creator(user_id, chat_id):
+            await set_owner(message, chat_id)
+        
+        elif command.startswith("/mute") and is_owner(user_id, chat_id):
+            await mute_user(message, chat_id)
+        
+        elif command.startswith("/unmute") and is_owner(user_id, chat_id):
+            await unmute_user(message, chat_id)
+        
+        elif command.startswith("/ban") and is_owner(user_id, chat_id):
+            await ban_user(message, chat_id)
+        
+        elif command.startswith("/warn") and is_owner(user_id, chat_id):
+            await warn_user(message, chat_id)
+        
+        elif command.startswith("/setrules") and is_owner(user_id, chat_id):
+            await set_rules(message, chat_id)
+        
+        elif command.startswith("/setwelcome") and is_owner(user_id, chat_id):
+            await set_welcome(message, chat_id)
+        
+        elif command.startswith("/addadmin") and is_owner(user_id, chat_id):
+            await add_admin(message, chat_id)
+        
+        elif command.startswith("/removeadmin") and is_owner(user_id, chat_id):
+            await remove_admin(message, chat_id)
+        
+        elif command == "/owner" and is_owner(user_id, chat_id):
+            await show_owner(message, chat_id)
+        
+        else:
+            await message.reply("🚫 دستور نامعتبر یا عدم دسترسی!")
+    except Exception as e:
+        print(f"Error in handle_command: {e}")
+        print(traceback.format_exc())
+        await message.reply("⚠️ خطایی در پردازش دستور رخ داد!")
+
+async def is_creator(user_id, chat_id):
+    """بررسی آیا کاربر سازنده گروه است"""
+    try:
+        chat_member = await bot.get_chat_member(chat_id, user_id)
+        return chat_member.status == "creator"
+    except:
+        return False
+
+# -------------------- GAME COMMAND HANDLERS --------------------
+async def game_help(message):
+    """نمایش راهنمای بازی"""
+    help_text = """
+🎮 راهنمای بازی نظامی:
+
+دستورات بازی:
+/points - نمایش امتیازات شما
+/military - نمایش نیروی نظامی شما
+/buy [نوع] [تعداد] - خرید تجهیزات نظامی
+/attack [ریپلای] - حمله به کاربر
+
+💰 انواع تجهیزات قابل خرید:
+- تانک‌ها: light_tank, medium_tank, heavy_tank, super_tank
+- هواپیماها: fighter, bomber, stealth, drone
+- موشک‌ها: missile, ballistic_missile, cruise_missile
+- نیروی دریایی: warship, submarine, aircraft_carrier
+- پیاده نظام: soldier, special_forces
+- توپخانه: artillery, rocket_launcher
+- سیستم‌های دفاعی: anti_air, radar
+
+🤝 دستورات اتحاد:
+/alliance_create [نام] - ایجاد اتحاد جدید
+/alliance_join [نام] - پیوستن به اتحاد
+/alliance_leave - ترک اتحاد
+/alliance_info [نام] - اطلاعات اتحاد
+/alliance_list - لیست اتحادها
+/alliance_invite [ریپلای] - دعوت کاربر به اتحاد
+/alliance_kick [ریپلای] - اخراج عضو از اتحاد
+
+💡 با ارسال پیام در گروه امتیاز کسب کنید!
+    """
+    await message.reply(help_text)
+
+async def show_points(message, chat_id, user_id):
+    """نمایش امتیازات کاربر"""
+    try:
+        user_data = get_user_data(chat_id, user_id)
+        await message.reply(f"💰 امتیازات شما: {user_data['points']}")
+        await delete_message_safe(message, 10)  # Delete after 10 seconds
+    except Exception as e:
+        print(f"Error in show_points: {e}")
+        await message.reply("⚠️ خطایی در نمایش امتیازات رخ داد!")
+
+async def show_military(message, chat_id, user_id):
+    """نمایش نیروی نظامی کاربر"""
+    try:
+        user_data = get_user_data(chat_id, user_id)
+        
+        military_text = "🎖 نیروی نظامی شما:\n\n"
+        
+        # Group assets by category for better display
+        categories = {
+            "تانک‌ها": ["light_tank", "medium_tank", "heavy_tank", "super_tank"],
+            "هواپیماها": ["fighter", "bomber", "stealth", "drone"],
+            "موشک‌ها": ["missile", "ballistic_missile", "cruise_missile"],
+            "نیروی دریایی": ["warship", "submarine", "aircraft_carrier"],
+            "پیاده نظام": ["soldier", "special_forces"],
+            "توپخانه": ["artillery", "rocket_launcher"],
+            "دفاعی": ["anti_air", "radar"]
+        }
+        
+        for category_name, asset_types in categories.items():
+            category_assets = []
+            for asset_type in asset_types:
+                count = user_data["military"][asset_type]
+                if count > 0:
+                    asset_name = get_asset_display_name(asset_type)
+                    category_assets.append(f"{asset_name}: {count}")
+            
+            if category_assets:
+                military_text += f"**{category_name}:**\n" + "\n".join(category_assets) + "\n\n"
+        
+        total_power = calculate_total_power(user_data)
+        battle_stats = f"💪 قدرت کل: {total_power}\n🏆 برد: {user_data['battles_won']} | 💀 باخت: {user_data['battles_lost']}"
+        
+        response = f"{military_text}\n{battle_stats}"
+        await message.reply(response)
+        await delete_message_safe(message, 15)  # Delete after 15 seconds
+    except Exception as e:
+        print(f"Error in show_military: {e}")
+        await message.reply("⚠️ خطایی در نمایش نیروی نظامی رخ داد!")
+
+async def buy_asset(message, chat_id, user_id):
+    """خرید تجهیزات نظامی"""
+    try:
+        parts = message.content.split()
+        if len(parts) < 3:
+            await message.reply("（*＾-＾*）کامند خرید نادرست میباشد")
+            return
+        
+        asset_type = parts[1].lower()
+        try:
+            quantity = int(parts[2])
+            if quantity <= 0:
+                await message.reply("<@_@>⚠️ تعداد باید بیشتر از صفر باشد!")
+                return
+        except ValueError:
+            await message.reply("⚠️ تعداد باید یک عدد باشد!")
+            return
+        
+        if asset_type not in MILITARY_ASSETS:
+            await message.reply("⚠️ نوع تجهیز نامعتبر است! از /game_help برای مشاهده انواع معتبر استفاده کنید.")
+            return
+        
+        user_data = get_user_data(chat_id, user_id)
+        asset_cost = get_asset_cost(asset_type)
+        total_cost = asset_cost * quantity
+        
+        if user_data["points"] < total_cost:
+            await message.reply(f"⚠️ امتیاز کافی ندارید! نیاز: {total_cost} امتیاز (دارایی: {user_data['points']})")
+            return
+        
+        # خرید تجهیزات
+        user_data["points"] -= total_cost
+        user_data["military"][asset_type] += quantity
+        
+        save_data()
+        
+        asset_name = get_asset_display_name(asset_type)
+        response = f"✅ {quantity} عدد {asset_name} با موفقیت خریداری شد!\nامتیاز باقیمانده: {user_data['points']}"
+        reply_msg = await message.reply(response)
+        
+        # حذف پیام‌ها برای محرمانه ماندن اطلاعات
+        await delete_message_safe(message, 3)  # Delete the command
+        await delete_message_safe(reply_msg, 10)  # Delete the response after 10 seconds
+        
+    except Exception as e:
+        print(f"Error in buy_asset: {e}")
+        await message.reply("⚠️ خطا در خرید تجهیزات!")
+
+async def attack_user(message, chat_id, user_id):
+    """حمله به کاربر دیگر"""
+    try:
+        if not message.reply_to_message:
+            await message.reply("⚠️ لطفا به پیام کاربر مورد نظر ریپلای کنید!")
+            return
+        
+        target_user = message.reply_to_message.author
+        if target_user.user_id == user_id:
+            await message.reply("🤣⚠️ نمی‌توانید به خودتان حمله کنید!")
+            return
+        
+        attacker_data = get_user_data(chat_id, user_id)
+        defender_data = get_user_data(chat_id, target_user.user_id)
+        
+        # بررسی اینکه آیا حمله کننده نیروی نظامی دارد
+        attacker_power = calculate_total_power(attacker_data)
+        if attacker_power == 0:
+            await message.reply("（*＾-＾*）⚠️ شما هیچ نیروی نظامی برای حمله ندارید!")
+            return
+        
+        # بررسی اینکه آیا مدافع نیروی نظامی دارد
+        defender_power = calculate_total_power(defender_data)
+        if defender_power == 0:
+            await message.reply("(●ˇ∀ˇ●)⚠️ کاربر مورد نظر هیچ نیروی نظامی برای دفاع ندارد!")
+            return
+        
+        
+
+
+        # محاسبه نتیجه نبرد
+        attack_strength = attacker_power * random.uniform(0.8, 1.2)
+        defense_strength = defender_power * random.uniform(0.8, 1.2)
+        
+        if attack_strength > defense_strength:
+            # حمله کننده برنده شد
+            damage_ratio = min(0.3, (attack_strength - defense_strength) / attack_strength * 0.5)
+            stolen_points = int(defender_data["points"] * damage_ratio)
+            
+            # انتقال امتیاز
+            attacker_data["points"] += stolen_points
+            defender_data["points"] = max(0, defender_data["points"] - stolen_points)
+            
+            # ثبت آمار
+            attacker_data["battles_won"] += 1
+            defender_data["battles_lost"] += 1
+            
+            result_text = (f"⚔️ {message.author.first_name} به {target_user.first_name} حمله کرد و پیروز شد!\n"
+                          f"💰 غنیمت: {stolen_points} امتیاز")
+        else:
+            # مدافع برنده شد
+            damage_ratio = min(0.2, (defense_strength - attack_strength) / defense_strength * 0.3)
+            lost_points = int(attacker_data["points"] * damage_ratio)
+            
+            # جریمه حمله کننده
+            attacker_data["points"] = max(0, attacker_data["points"] - lost_points)
+            
+            # ثبت آمار
+            attacker_data["battles_lost"] += 1
+            defender_data["battles_won"] += 1
+            
+            result_text = (f"🛡 {message.author.first_name} به {target_user.first_name} حمله کرد اما شکست خورد!\n"
+                          f"💸 جریمه: {lost_points} امتیاز")
+        
+        save_data()
+        await message.reply(result_text)
+        
+    except Exception as e:
+        print(f"Error in attack_user: {e}")
+        await message.reply("⚠️ خطا در انجام حمله!")
+
+# -------------------- ALLIANCE COMMAND HANDLERS --------------------
+async def handle_alliance_command(message, chat_id, user_id):
+    """Process alliance commands"""
+    parts = message.content.split()
+    if len(parts) < 2:
+        await message.reply("⚠️ فرمت دستور نادرست است. از /game_help برای راهنمایی استفاده کنید.")
+        return
+    
+    subcommand = parts[1].lower()
+    
+    if subcommand == "create" and len(parts) >= 3:
+        await alliance_create(message, chat_id, user_id, " ".join(parts[2:]))
+    elif subcommand == "join" and len(parts) >= 3:
+        await alliance_join(message, chat_id, user_id, " ".join(parts[2:]))
+    elif subcommand == "leave":
+        await alliance_leave(message, chat_id, user_id)
+    elif subcommand == "info" and len(parts) >= 3:
+        await alliance_info(message, chat_id, " ".join(parts[2:]))
+    elif subcommand == "list":
+        await alliance_list(message, chat_id)
+    elif subcommand == "invite":
+        await alliance_invite(message, chat_id, user_id)
+    elif subcommand == "kick":
+        await alliance_kick(message, chat_id, user_id)
+    else:
+        await message.reply("⚠️ دستور اتحاد نامعتبر است. از /game_help برای راهنمایی استفاده کنید.")
+
+async def alliance_create(message, chat_id, user_id, alliance_name):
+    """Create a new alliance"""
+    try:
+        chat_data = get_chat_data(chat_id)
+        user_data = get_user_data(chat_id, user_id)
+        
+        if user_data["alliance"]:
+            await message.reply("⚠️ شما قبلاً در یک اتحاد عضو هستید. ابتدا از اتحاد فعلی خارج شوید.")
+            return
+        
+        if alliance_name in chat_data["alliances"]:
+            await message.reply("⚠️ اتحادی با این نام از قبل وجود دارد.")
+            return
+        
+        # Create alliance
+        chat_data["alliances"][alliance_name] = {
+            "creator": user_id,
+            "members": [user_id],
+            "created_at": datetime.now().isoformat(),
+            "description": "اتحاد جدید"
+        }
+        
+        # Add user to alliance
+        user_data["alliance"] = alliance_name
+        
+        save_data()
+        await message.reply(f"✅ اتحاد '{alliance_name}' با موفقیت ایجاد شد و شما به آن پیوستید!")
+        
+    except Exception as e:
+        print(f"Error in alliance_create: {e}")
+        await message.reply("⚠️ خطا در ایجاد اتحاد!")
+
+async def alliance_join(message, chat_id, user_id, alliance_name):
+    """Join an existing alliance"""
+    try:
+        chat_data = get_chat_data(chat_id)
+        user_data = get_user_data(chat_id, user_id)
+        
+        if user_data["alliance"]:
+            await message.reply("⚠️ شما قبلاً در یک اتحاد عضو هستید. ابتدا از اتحاد فعلی خارج شوید.")
+            return
+        
+        if alliance_name not in chat_data["alliances"]:
+            await message.reply("⚠️ اتحادی با این نام وجود ندارد.")
+            return
+        
+        # Add user to alliance
+        chat_data["alliances"][alliance_name]["members"].append(user_id)
+        user_data["alliance"] = alliance_name
+        
+        save_data()
+        await message.reply(f"✅ شما با موفقیت به اتحاد '{alliance_name}' پیوستید!")
+        
+    except Exception as e:
+        print(f"Error in alliance_join: {e}")
+        await message.reply("⚠️ خطا در پیوستن به اتحاد!")
+
+async def alliance_leave(message, chat_id, user_id):
+    """Leave an alliance"""
+    try:
+        chat_data = get_chat_data(chat_id)
+        user_data = get_user_data(chat_id, user_id)
+        
+        if not user_data["alliance"]:
+            await message.reply("⚠️ شما در هیچ اتحادی عضو نیستید.")
+            return
+        
+        alliance_name = user_data["alliance"]
+        
+        if alliance_name not in chat_data["alliances"]:
+            user_data["alliance"] = None
+            save_data()
+            await message.reply("⚠️ اتحاد شما وجود ندارد. وضعیت شما به روز شد.")
+            return
+        
+        alliance = chat_data["alliances"][alliance_name]
+        
+        # Remove user from alliance
+        if user_id in alliance["members"]:
+            alliance["members"].remove(user_id)
+        
+        # If alliance is empty, delete it
+        if not alliance["members"]:
+            del chat_data["alliances"][alliance_name]
+        # If creator leaves, assign new creator
+        elif alliance["creator"] == user_id:
+            alliance["creator"] = alliance["members"][0]
+        
+        user_data["alliance"] = None
+        
+        save_data()
+        await message.reply(f"✅ شما با موفقیت از اتحاد '{alliance_name}' خارج شدید!")
+        
+    except Exception as e:
+        print(f"Error in alliance_leave: {e}")
+        await message.reply("⚠️ خطا در ترک اتحاد!")
+
+async def alliance_info(message, chat_id, alliance_name):
+    """Show information about an alliance"""
+    try:
+        chat_data = get_chat_data(chat_id)
+        
+        if alliance_name not in chat_data["alliances"]:
+            await message.reply("⚠️ اتحادی با این نام وجود ندارد.")
+            return
+        
+        alliance = chat_data["alliances"][alliance_name]
+        creator_id = alliance["creator"]
+        
+        # Get creator name
+        try:
+            creator = await bot.get_chat_member(chat_id, creator_id)
+            creator_name = creator.user.first_name
+        except:
+            creator_name = f"User#{creator_id}"
+        
+        # Get member count and total power
+        member_count = len(alliance["members"])
+        total_power = 0
+        
+        for member_id in alliance["members"]:
+            member_data = get_user_data(chat_id, member_id)
+            total_power += calculate_total_power(member_data)
+        
+        created_at = datetime.fromisoformat(alliance["created_at"]).strftime("%Y-%m-%d %H:%M")
+        
+        info_text = (
+            f"🤝 اطلاعات اتحاد '{alliance_name}':\n\n"
+            f"👑 سازنده: {creator_name}\n"
+            f"👥 اعضا: {member_count} نفر\n"
+            f"💪 قدرت کل: {total_power}\n"
+            f"📅 تاریخ ایجاد: {created_at}\n"
+            f"📝 توضیحات: {alliance.get('description', 'بدون توضیح')}"
+        )
+        
+        await message.reply(info_text)
+        
+    except Exception as e:
+        print(f"Error in alliance_info: {e}")
+        await message.reply("⚠️ خطا در دریافت اطلاعات اتحاد!")
+
+async def alliance_list(message, chat_id):
+    """List all alliances in the chat"""
+    try:
+        chat_data = get_chat_data(chat_id)
+        
+        if not chat_data["alliances"]:
+            await message.reply("⚠️ هیچ اتحادی در این گروه وجود ندارد.")
+            return
+        
+        alliances_text = "🤝 لیست اتحادهای گروه:\n\n"
+        
+        for alliance_name, alliance_data in chat_data["alliances"].items():
+            member_count = len(alliance_data["members"])
+            alliances_text += f"• {alliance_name} ({member_count} عضو)\n"
+        
+        await message.reply(alliances_text)
+        
+    except Exception as e:
+        print(f"Error in alliance_list: {e}")
+        await message.reply("⚠️ خطا در دریافت لیست اتحادها!")
+
+async def alliance_invite(message, chat_id, user_id):
+    """Invite a user to your alliance"""
+    try:
+        if not message.reply_to_message:
+            await message.reply("⚠️ لطفا به پیام کاربر مورد نظر ریپلای کنید!")
+            return
+        
+        target_user = message.reply_to_message.author
+        target_user_id = target_user.user_id
+        
+        user_data = get_user_data(chat_id, user_id)
+        target_user_data = get_user_data(chat_id, target_user_id)
+        chat_data = get_chat_data(chat_id)
+        
+        if not user_data["alliance"]:
+            await message.reply("⚠️ شما در هیچ اتحادی عضو نیستید.")
+            return
+        
+        if target_user_data["alliance"]:
+            await message.reply("⚠️ این کاربر قبلاً در یک اتحاد عضو است.")
+            return
+        
+        alliance_name = user_data["alliance"]
+        alliance = chat_data["alliances"][alliance_name]
+        
+        # Check if user is the creator or has permission
+        if user_id != alliance["creator"]:
+            await message.reply("⚠️ فقط سازنده اتحاد می‌تواند کاربران جدید دعوت کند.")
+            return
+        
+        # Add invitation logic here (could be implemented with pending invitations)
+        await message.reply(f"✅ invitation sent to {target_user.first_name} to join {alliance_name}!")
+        
+    except Exception as e:
+        print(f"Error in alliance_invite: {e}")
+        await message.reply("⚠️ خطا در ارسال دعوت!")
+
+async def alliance_kick(message, chat_id, user_id):
+    """Kick a user from your alliance"""
+    try:
+        if not message.reply_to_message:
+            await message.reply("⚠️ لطفا به پیام کاربر مورد نظر ریپلای کنید!")
+            return
+        
+        target_user = message.reply_to_message.author
+        target_user_id = target_user.user_id
+        
+        user_data = get_user_data(chat_id, user_id)
+        target_user_data = get_user_data(chat_id, target_user_id)
+        chat_data = get_chat_data(chat_id)
+        
+        if not user_data["alliance"]:
+            await message.reply("⚠️ شما در هیچ اتحادی عضو نیستید.")
+            return
+        
+        alliance_name = user_data["alliance"]
+        
+        if alliance_name != target_user_data["alliance"]:
+            await message.reply("⚠️ این کاربر در اتحاد شما عضو نیست.")
+            return
+        
+        alliance = chat_data["alliances"][alliance_name]
+        
+        # Check if user is the creator or has permission
+        if user_id != alliance["creator"]:
+            await message.reply("⚠️ فقط سازنده اتحاد می‌تواند کاربران را اخراج کند.")
+            return
+        
+        # Cannot kick yourself
+        if target_user_id == user_id:
+            await message.reply("⚠️ نمی‌توانید خودتان را اخراج کنید.")
+            return
+        
+        # Remove user from alliance
+        if target_user_id in alliance["members"]:
+            alliance["members"].remove(target_user_id)
+        
+        target_user_data["alliance"] = None
+        
+        save_data()
+        await message.reply(f"✅ کاربر {target_user.first_name} از اتحاد اخراج شد!")
+        
+    except Exception as e:
+        print(f"Error in alliance_kick: {e}")
+        await message.reply("⚠️ خطا در اخراج کاربر!")
+
+# -------------------- ORIGINAL COMMAND HANDLERS --------------------
+async def show_help(message):
+    """نمایش پیام راهنما"""
+    help_text = """
+🤖 راهنمای ربات مدیریت گروه:
+
+👤 دستورات عمومی:
+/help - نمایش این راهنما
+/rules - نمایش قوانین گروه
+/info - اطلاعات کاربری
+/game_help - راهنمای بازی نظامی
+
+🎮 دستورات بازی:
+/points - نمایش امتیازات
+/military - نمایش نیروی نظامی
+/buy [نوع] [تعداد] - خرید تجهیزات
+/attack [ریپلای] - حمله به کاربر
+
+🤝 دستورات اتحاد:
+/alliance_create [نام] - ایجاد اتحاد
+/alliance_join [نام] - پیوستن به اتحاد
+/alliance_leave - ترک اتحاد
+/alliance_info [نام] - اطلاعات اتحاد
+/alliance_list - لیست اتحادها
+/alliance_invite [ریپلای] - دعوت به اتحاد
+/alliance_kick [ریپلای] - اخراج از اتحاد
+
+🛡 دستورات مالک گروه:
+/setowner - تنظیم مالک جدید (فقط سازنده گروه)
+/mute [زمان] [دلیل] - محدود کردن کاربر
+/unmute - حذف محدودیت کاربر
+/ban [دلیل] - حذف کاربر از گروه
+/warn [دلیل] - اخطار به کاربر
+/setrules [متن] - تنظیم قوانین گروه
+/setwelcome [متن] - تنظیم پیام خوشآمدگویی
+/addadmin [ایدی] - افزودن ادمین جدید
+/removeadmin [ایدی] - حذف ادمین
+/owner - نمایش مالک گروه
+    """
+    await message.reply(help_text)
+
+async def show_rules(message, chat_id):
+    """نمایش قوانین گروه"""
+    try:
+        chat_data = get_chat_data(chat_id)
+        await message.reply(f"📜 قوانین گروه:\n\n{chat_data['rules']}")
+    except Exception as e:
+        print(f"Error in show_rules: {e}")
+        await message.reply("⚠️ خطایی در نمایش قوانین رخ داد!")
+
+async def user_info(message):
+    """نمایش اطلاعات کاربر"""
+    try:
+        user = message.author
+        user_data = get_user_data(message.chat.id, user.user_id)
+        
+        alliance_info = ""
+        if user_data["alliance"]:
+            alliance_info = f"🤝 اتحاد: {user_data['alliance']}\n"
+        
+        await message.reply(f"👤 اطلاعات کاربر:\n\n"
+                          f"نام: {user.first_name}\n"
+                          f"آیدی: {user.user_id}\n"
+                          f"یوزرنیم: @{user.username or 'ندارد'}\n"
+                          f"{alliance_info}"
+                          f"💰 امتیاز: {user_data['points']}\n"
+                          f"💪 قدرت نظامی: {calculate_total_power(user_data)}")
+    except Exception as e:
+        print(f"Error in user_info: {e}")
+        await message.reply("⚠️ خطایی در نمایش اطلاعات کاربر رخ داد!")
+
+async def set_owner(message, chat_id):
+    """تنظیم مالک گروه"""
+    try:
+        if not await is_creator(message.author.user_id, chat_id):
+            await message.reply("🚫 فقط سازنده گروه می‌تواند مالک را تنظیم کند!")
+            return
+            
+        if not message.reply_to_message:
+            await message.reply("⚠️ لطفا به پیام کاربر مورد نظر ریپلای کنید!")
+            return
+        
+        new_owner_id = message.reply_to_message.author.user_id
+        chat_data = get_chat_data(chat_id)
+        chat_data["owner_id"] = new_owner_id
+        save_data()
+        
+        await message.reply(f"✅ مالک گروه با موفقیت تنظیم شد!")
+        
+    except Exception as e:
+        print(f"Error in set_owner: {e}")
+        await message.reply("⚠️ خطا در تنظیم مالک!")
+
+async def mute_user(message, chat_id):
+    """محدود کردن کاربر"""
+    try:
+        # استخراج پارامترها از دستور
+        parts = message.content.split()
+        if len(parts) < 2:
+            await message.reply("⚠️ فرمت دستور: /mute [زمان] [دلیل]\nمثال: /mute 1h اسپم")
+            return
+        
+        # تجزیه مدت زمان محدودیت
+        time_str = parts[1].lower()
+        if time_str.endswith("m"):
+            duration = int(time_str[:-1]) * 60  # دقیقه
+        elif time_str.endswith("h"):
+            duration = int(time_str[:-1]) * 3600  # ساعت
+        elif time_str.endswith("d"):
+            duration = int(time_str[:-1]) * 86400  # روز
+        else:
+            duration = int(time_str) * 60  # پیش‌فرض دقیقه
+        
+        # دریافت دلیل
+        reason = " ".join(parts[2:]) if len(parts) > 2 else "بدون دلیل"
+        
+        # بررسی آیا به کاربر ریپلای شده
+        if not message.reply_to_message:
+            await message.reply("⚠️ لطفا به پیام کاربر مورد نظر ریپلای کنید!")
+            return
+        
+        target_id = message.reply_to_message.author.user_id
+        chat_data = get_chat_data(chat_id)
+        
+        # محدود کردن کاربر تا زمان خاص
+        mute_until = datetime.now() + timedelta(seconds=duration)
+        chat_data["muted_users"][str(target_id)] = mute_until.isoformat()
+        save_data()
+        
+        await message.reply(f"🔇 کاربر به مدت {format_time(duration)} محدود شد.\nدلیل: {reason}")
+        
+    except Exception as e:
+        print(f"Error in mute_user: {e}")
+        await message.reply("⚠️ خطا در اجرای دستور!")
+
+async def unmute_user(message, chat_id):
+    """حذف محدودیت کاربر"""
+    try:
+        if not message.reply_to_message:
+            await message.reply("⚠️ لطفا به پیام کاربر مورد نظر ریپلای کنید!")
+            return
+        
+        target_id = message.reply_to_message.author.user_id
+        chat_data = get_chat_data(chat_id)
+        
+        if str(target_id) in chat_data["muted_users"]:
+            del chat_data["muted_users"][str(target_id)]
+            save_data()
+            await message.reply("✅ محدودیت کاربر حذف شد.")
+        else:
+            await message.reply("⚠️ کاربر محدودیتی ندارد!")
+    except Exception as e:
+        print(f"Error in unmute_user: {e}")
+        await message.reply("⚠️ خطا در حذف محدودیت!")
+
+async def ban_user(message, chat_id):
+    """حذف کاربر از گروه"""
+    try:
+        if not message.reply_to_message:
+            await message.reply("⚠️ لطفا به پیام کاربر مورد نظر ریپلای کنید!")
+            return
+        
+        # استخراج دلیل
+        parts = message.content.split()
+        reason = " ".join(parts[1:]) if len(parts) > 1 else "بدون دلیل"
+        
+        target_user = message.reply_to_message.author
+        await bot.ban_chat_member(chat_id, target_user.user_id)
+        
+        await message.reply(f"🚫 کاربر از گروه حذف شد.\nدلیل: {reason}")
+        
+    except Exception as e:
+        print(f"Error in ban_user: {e}")
+        await message.reply("⚠️ خطا در حذف کاربر!")
+
+async def warn_user(message, chat_id):
+    """اخطار به کاربر"""
+    try:
+        if not message.reply_to_message:
+            await message.reply("⚠️ لطفا به پیام کاربر مورد نظر ریپلای کنید!")
+            return
+        
+        # استخراج دلیل
+        parts = message.content.split()
+        reason = " ".join(parts[1:]) if len(parts) > 1 else "بدون دلیل"
+        
+        target_id = message.reply_to_message.author.user_id
+        chat_data = get_chat_data(chat_id)
+        
+        # افزودن اخطار
+        if str(target_id) not in chat_data["warnings"]:
+            chat_data["warnings"][str(target_id)] = []
+        
+        chat_data["warnings"][str(target_id)].append({
+            "reason": reason,
+            "time": datetime.now().isoformat(),
+            "by": message.author.user_id
+        })
+        save_data()
+        
+        warning_count = len(chat_data["warnings"][str(target_id)])
+        await message.reply(f"⚠️ به کاربر اخطار داده شد.\nدلیل: {reason}\nتعداد اخطارها: {warning_count}")
+        
+    except Exception as e:
+        print(f"Error in warn_user: {e}")
+        await message.reply("⚠️ خطا در ثبت اخطار!")
+
+async def set_rules(message, chat_id):
+    """تنظیم قوانین گروه"""
+    try:
+        new_rules = message.content.replace("/setrules", "").strip()
+        if not new_rules:
+            await message.reply("⚠️ لطفا متن قوانین را وارد کنید!")
+            return
+        
+        chat_data = get_chat_data(chat_id)
+        chat_data["rules"] = new_rules
+        save_data()
+        
+        await message.reply("✅ قوانین گروه با موفقیت به روز شد!")
+        
+    except Exception as e:
+        print(f"Error in set_rules: {e}")
+        await message.reply("⚠️ خطا در ذخیره قوانین!")
+
+async def set_welcome(message, chat_id):
+    """تنظیم پیام خوشآمدگویی"""
+    try:
+        new_welcome = message.content.replace("/setwelcome", "").strip()
+        if not new_welcome:
+            await message.reply("⚠️ لطفا متن پیام خوشآمدگویی را وارد کنید!")
+            return
+        
+        chat_data = get_chat_data(chat_id)
+        chat_data["welcome_message"] = new_welcome
+        save_data()
+        
+        await message.reply("✅ پیام خوشآمدگویی با موفقیت به روز شد!")
+        
+    except Exception as e:
+        print(f"Error in set_welcome: {e}")
+        await message.reply("⚠️ خطا در ذخیره پیام!")
+
+async def add_admin(message, chat_id):
+    """افزودن ادمین جدید"""
+    try:
+        parts = message.content.split()
+        if len(parts) < 2:
+            await message.reply("⚠️ فرمت دستور: /addadmin [آیدی کاربر]")
+            return
+        
+        new_admin_id = int(parts[1])
+        chat_data = get_chat_data(chat_id)
+        
+        if new_admin_id not in chat_data["admins"]:
+            chat_data["admins"].append(new_admin_id)
+            save_data()
+            await message.reply(f"✅ کاربر {new_admin_id} به لیست ادمین ها افزوده شد!")
+        else:
+            await message.reply("⚠️ کاربر قبلا ادمین است!")
+            
+    except ValueError:
+        await message.reply("⚠️ آیدی کاربر باید عددی باشد!")
+    except Exception as e:
+        print(f"Error in add_admin: {e}")
+        await message.reply("⚠️ خطا در افزودن ادمین!")
+
+async def remove_admin(message, chat_id):
+    """حذف ادمین"""
+    try:
+        parts = message.content.split()
+        if len(parts) < 2:
+            await message.reply("⚠️ فرمت دستور: /removeadmin [آیدی کاربر]")
+            return
+        
+        admin_id = int(parts[1])
+        chat_data = get_chat_data(chat_id)
+        
+        if admin_id in chat_data["admins"]:
+            chat_data["admins"].remove(admin_id)
+            save_data()
+            await message.reply(f"✅ کاربر {admin_id} از لیست ادمین ها حذف شد!")
+        else:
+            await message.reply("⚠️ کاربر در لیست ادمین ها نیست!")
+            
+    except ValueError:
+        await message.reply("⚠️ آیدی کاربر باید عددی باشد!")
+    except Exception as e:
+        print(f"Error in remove_admin: {e}")
+        await message.reply("⚠️ خطا در حذف ادمین!")
+
+async def show_owner(message, chat_id):
+    """نمایش مالک گروه"""
+    try:
+        chat_data = get_chat_data(chat_id)
+        if chat_data["owner_id"]:
+            await message.reply(f"👑 مالک گروه: {chat_data['owner_id']}")
+        else:
+            await message.reply("⚠️ مالک گروه تنظیم نشده است. از /setowner استفاده کنید.")
+    except Exception as e:
+        print(f"Error in show_owner: {e}")
+        await message.reply("⚠️ خطا در نمایش مالک گروه!")
+
+# -------------------- AUTOMATIC ACTIONS --------------------
+@bot.event
+async def on_chat_join(chat_member: ChatMember):
+    """مدیریت ورود عضو جدید"""
+    try:
+        chat_id = chat_member.chat.id
+        user = chat_member.user
+        
+        chat_data = get_chat_data(chat_id)
+        welcome_msg = chat_data["welcome_message"]
+        
+        await bot.send_message(chat_id, f"👋 {user.first_name} {welcome_msg}")
+    except Exception as e:
+        print(f"Error in on_chat_join: {e}")
+
+@bot.event
+async def on_chat_leave(chat_member: ChatMember):
+    """مدیریت خروج عضو"""
+    try:
+        chat_id = chat_member.chat.id
+        user = chat_member.user
+        
+        await bot.send_message(chat_id, f"👋 {user.first_name} از گروه خارج شد.")
+    except Exception as e:
+        print(f"Error in on_chat_leave: {e}")
+
+
+# -------------------- RUN BOT --------------------
+if __name__ == "__main__":
+    print("starting system ...")
+    load_data()
+    bot.run()
